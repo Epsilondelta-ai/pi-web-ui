@@ -1,0 +1,7 @@
+# Pi local package install artifacts
+.pi/npm/
+
+# Transient MoAI/Pi runtime artifacts
+.moai/logs/
+.pi/state/sessions/
+.moai/reports/

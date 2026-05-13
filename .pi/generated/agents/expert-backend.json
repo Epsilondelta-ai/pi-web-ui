@@ -1,0 +1,62 @@
+{
+  "name": "expert-backend",
+  "description": "Backend architecture and database specialist. Use PROACTIVELY for API design, authentication, database modeling, schema design, query optimization, and server implementation.\nMUST INVOKE when ANY of these keywords appear in user request:\n--deepthink flag: Activate Sequential Thinking MCP for deep analysis of backend architecture decisions, database schema design, and API patterns.\nEN: backend, API, server, authentication, database, REST, GraphQL, microservices, JWT, OAuth, SQL, NoSQL, PostgreSQL, MongoDB, Redis, Oracle, PL/SQL, schema, query, index, data modeling\nKO: 백엔드, API, 서버, 인증, 데이터베이스, RESTful, 마이크로서비스, 토큰, SQL, NoSQL, PostgreSQL, MongoDB, Redis, 오라클, Oracle, PL/SQL, 스키마, 쿼리, 인덱스, 데이터모델링\nJA: バックエンド, API, サーバー, 認証, データベース, マイクロサービス, SQL, NoSQL, PostgreSQL, MongoDB, Redis, Oracle, PL/SQL, スキーマ, クエリ, インデックス\nZH: 后端, API, 服务器, 认证, 数据库, 微服务, 令牌, SQL, NoSQL, PostgreSQL, MongoDB, Redis, Oracle, PL/SQL, 架构, 查询, 索引\nNOT for: frontend UI, CSS styling, React components, mobile apps, CLI tools, DevOps/deployment, security audits",
+  "model": "inherit",
+  "thinking": "medium",
+  "tools": [
+    "bash",
+    "edit",
+    "fetch_content",
+    "mcp",
+    "read",
+    "web_search",
+    "write"
+  ],
+  "skills": [
+    "moai-foundation-core",
+    "moai-domain-backend",
+    "moai-domain-database",
+    "moai-workflow-testing"
+  ],
+  "sourcePath": ".pi/generated/source/agents/moai/expert-backend.md",
+  "sourceHash": "aa76018d17cc829f",
+  "generatedAt": "2026-05-09T19:36:21.029Z",
+  "compatibility": {
+    "permissionMode": "bypassPermissions",
+    "permissionModePolicy": "metadata-only",
+    "originalModel": "sonnet",
+    "originalMaxTurns": "unspecified",
+    "originalMemory": "project",
+    "originalTools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "TodoWrite",
+      "Skill",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
+    ],
+    "toolAliases": {
+      "Read": "read",
+      "Write": "write",
+      "Edit": "edit",
+      "Grep": "bash:rg",
+      "Glob": "bash:find",
+      "WebFetch": "pi-web-access:fetch_content",
+      "WebSearch": "pi-web-access:web_search",
+      "Bash": "bash",
+      "TodoWrite": "@juicesharp/rpiv-todo",
+      "Skill": "pi skills/read",
+      "mcp__sequential-thinking__sequentialthinking": "mcp gateway",
+      "mcp__context7__resolve-library-id": "mcp gateway",
+      "mcp__context7__get-library-docs": "mcp gateway"
+    },
+    "hasAgentHooks": true
+  }
+}

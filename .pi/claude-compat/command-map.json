@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "commands": {
+    "moai": {
+      "source": "./generated/source/skills/moai/SKILL.md",
+      "router": "moai-claude-compat/src/command-router.ts"
+    },
+    "github": {
+      "source": "./generated/source/commands/98-github.md"
+    },
+    "release": {
+      "source": "./generated/source/commands/99-release.md"
+    }
+  },
+  "moaiSubcommands": [
+    "brain",
+    "plan",
+    "run",
+    "sync",
+    "design",
+    "db",
+    "project",
+    "feedback",
+    "fix",
+    "loop",
+    "mx",
+    "review",
+    "clean",
+    "codemaps",
+    "coverage",
+    "e2e",
+    "gate",
+    "security"
+  ]
+}

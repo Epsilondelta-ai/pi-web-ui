@@ -1,0 +1,66 @@
+{
+  "name": "pi-provider-kimi-code",
+  "version": "0.3.0",
+  "description": "Pi extension for Kimi Code — reuse your Kimi Code Plan in pi-coding-agent (K2.6, K2.5)",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi-provider",
+    "pi",
+    "pi-coding-agent",
+    "pi-mono",
+    "coding-agent",
+    "ai-provider",
+    "llm",
+    "llm-provider",
+    "kimi",
+    "kimi-for-coding",
+    "kimi-coder",
+    "kimi-k2",
+    "kimi-k2.6",
+    "kimi-k2.5",
+    "moonshot",
+    "moonshotai",
+    "oauth",
+    "device-code",
+    "subscription"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Leechael/pi-provider-kimi-code"
+  },
+  "bugs": {
+    "url": "https://github.com/Leechael/pi-provider-kimi-code/issues"
+  },
+  "author": "Leechael",
+  "files": [
+    "index.ts",
+    "package.json",
+    "README.md"
+  ],
+  "type": "module",
+  "scripts": {
+    "clean": "echo 'nothing to clean'",
+    "build": "echo 'nothing to build'",
+    "check": "echo 'nothing to check'",
+    "lint": "oxlint .",
+    "format": "oxfmt . --write",
+    "format:check": "oxfmt . --check",
+    "pre-commit": "prek run"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  },
+  "devDependencies": {
+    "@j178/prek": "^0.3.8",
+    "oxfmt": "^0.44.0",
+    "oxlint": "^1.59.0"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

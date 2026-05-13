@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "default": "moai",
+  "styles": {
+    "moai": {
+      "source": "./generated/source/output-styles/moai/moai.md"
+    },
+    "einstein": {
+      "source": "./generated/source/output-styles/moai/einstein.md"
+    }
+  },
+  "runtime": {
+    "mechanism": "prompt-injection + ctx.ui.setStatus/widget",
+    "userFacingXml": "forbidden",
+    "internalCompletionMarker": "extension-state-only"
+  }
+}

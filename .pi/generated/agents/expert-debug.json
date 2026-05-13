@@ -1,0 +1,47 @@
+{
+  "name": "expert-debug",
+  "description": "Debugging specialist. Use PROACTIVELY for error diagnosis, bug fixing, exception handling, and troubleshooting.\nMUST INVOKE when ANY of these keywords appear in user request:\n--deepthink flag: Activate Sequential Thinking MCP for deep analysis of error patterns, root causes, and debugging strategies.\nEN: debug, error, bug, exception, crash, troubleshoot, diagnose, fix error\nKO: 디버그, 에러, 버그, 예외, 크래시, 문제해결, 진단, 오류수정\nJA: デバッグ, エラー, バグ, 例外, クラッシュ, トラブルシュート, 診断\nZH: 调试, 错误, bug, 异常, 崩溃, 故障排除, 诊断\nNOT for: new feature development, architecture design, code review, security audits, documentation",
+  "model": "inherit",
+  "thinking": "medium",
+  "tools": [
+    "bash",
+    "mcp",
+    "read"
+  ],
+  "skills": [
+    "moai-foundation-core",
+    "moai-foundation-quality",
+    "moai-workflow-loop"
+  ],
+  "sourcePath": ".pi/generated/source/agents/moai/expert-debug.md",
+  "sourceHash": "243bbe3a47d16df8",
+  "generatedAt": "2026-05-09T19:36:21.029Z",
+  "compatibility": {
+    "permissionMode": "bypassPermissions",
+    "permissionModePolicy": "metadata-only",
+    "originalModel": "sonnet",
+    "originalMaxTurns": "unspecified",
+    "originalMemory": "project",
+    "originalTools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Skill",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
+    ],
+    "toolAliases": {
+      "Read": "read",
+      "Grep": "bash:rg",
+      "Glob": "bash:find",
+      "Bash": "bash",
+      "Skill": "pi skills/read",
+      "mcp__sequential-thinking__sequentialthinking": "mcp gateway",
+      "mcp__context7__resolve-library-id": "mcp gateway",
+      "mcp__context7__get-library-docs": "mcp gateway"
+    },
+    "hasAgentHooks": true
+  }
+}

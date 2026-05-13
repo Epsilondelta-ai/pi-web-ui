@@ -1,0 +1,43 @@
+llm:
+  mode: ""
+  team_mode: ""
+  glm_env_var: "GLM_API_KEY"
+
+  # Performance tier selection (set once during init/update)
+  # Controls model selection for all sub-agents and team agents
+  # Options: high (complex reasoning), medium (balanced), low (fast/cheap)
+  performance_tier: "medium"
+
+  # Claude model mapping by tier
+  # Effort level mapping (Opus 4.7+ adaptive thinking):
+  #   thorough harness → xhigh effort (deep reasoning)
+  #   standard harness → high effort (balanced reasoning)
+  #   minimal harness  → medium effort (fast, light)
+  claude_models:
+    high: "claude-opus-4-7"  # Opus 4.7: adaptive thinking, reasoning agents
+    medium: "sonnet"         # Balanced performance for most tasks
+    low: "haiku"             # Fast exploration, simple tasks
+
+  # GLM backend configuration
+  glm:
+    base_url: "https://api.z.ai/api/anthropic"
+    models:
+      high: "glm-5.1"           # Complex reasoning
+      medium: "glm-4.7"       # Balanced performance
+      low: "glm-4.5-air"      # Lightweight tasks (Z.ai official default)
+
+    # Optional: override the statusline context window gauge per GLM model
+    # (issue #653). Claude Code reports context_window_size based on the
+    # Claude slot (Opus=1M, Sonnet/Haiku=200K) regardless of provider, so
+    # the statusline over-reports headroom in GLM mode.
+    #
+    # Values are in tokens. Substring match: "glm-5.1" matches "glm-5.1[1m]".
+    # Set MOAI_STATUSLINE_CONTEXT_SIZE env for a one-shot override instead.
+    # Reference (Z.AI official docs, 2026-04):
+    #   glm-5.1     : 204800 context / 131072 max output
+    #   glm-4.7     : 202752 context (per OpenRouter mirror)
+    #   glm-4.5-air : 128000 context
+    # context_windows:
+    #   glm-5.1: 204800
+    #   glm-4.7: 202752
+    #   glm-4.5-air: 128000

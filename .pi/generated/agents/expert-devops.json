@@ -1,0 +1,65 @@
+{
+  "name": "expert-devops",
+  "description": "DevOps specialist. Use PROACTIVELY for CI/CD, Docker, Kubernetes, deployment, and infrastructure automation.\nMUST INVOKE when ANY of these keywords appear in user request:\n--deepthink flag: Activate Sequential Thinking MCP for deep analysis of deployment strategies, CI/CD pipelines, and infrastructure architecture.\nEN: DevOps, CI/CD, Docker, Kubernetes, deployment, pipeline, infrastructure, container\nKO: 데브옵스, CI/CD, 도커, 쿠버네티스, 배포, 파이프라인, 인프라, 컨테이너\nJA: DevOps, CI/CD, Docker, Kubernetes, デプロイ, パイプライン, インフラ\nZH: DevOps, CI/CD, Docker, Kubernetes, 部署, 流水线, 基础设施\nNOT for: application code, frontend UI, database schema design, security audits, performance profiling, testing strategy",
+  "model": "inherit",
+  "thinking": "medium",
+  "tools": [
+    "bash",
+    "edit",
+    "fetch_content",
+    "mcp",
+    "read",
+    "web_search",
+    "write"
+  ],
+  "skills": [
+    "moai-foundation-core",
+    "moai-platform-deployment",
+    "moai-workflow-project"
+  ],
+  "sourcePath": ".pi/generated/source/agents/moai/expert-devops.md",
+  "sourceHash": "617f80b618e38fc5",
+  "generatedAt": "2026-05-09T19:36:21.030Z",
+  "compatibility": {
+    "permissionMode": "bypassPermissions",
+    "permissionModePolicy": "metadata-only",
+    "originalModel": "sonnet",
+    "originalMaxTurns": "unspecified",
+    "originalMemory": "project",
+    "originalTools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "TodoWrite",
+      "Skill",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__github__create-or-update-file",
+      "mcp__github__push-files",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
+    ],
+    "toolAliases": {
+      "Read": "read",
+      "Write": "write",
+      "Edit": "edit",
+      "Grep": "bash:rg",
+      "Glob": "bash:find",
+      "WebFetch": "pi-web-access:fetch_content",
+      "WebSearch": "pi-web-access:web_search",
+      "Bash": "bash",
+      "TodoWrite": "@juicesharp/rpiv-todo",
+      "Skill": "pi skills/read",
+      "mcp__sequential-thinking__sequentialthinking": "mcp gateway",
+      "mcp__github__create-or-update-file": "mcp gateway",
+      "mcp__github__push-files": "mcp gateway",
+      "mcp__context7__resolve-library-id": "mcp gateway",
+      "mcp__context7__get-library-docs": "mcp gateway"
+    },
+    "hasAgentHooks": true
+  }
+}
