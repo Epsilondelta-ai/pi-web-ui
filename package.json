@@ -17,5 +17,9 @@
     "prettier": "latest",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "latest"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
   }
 }

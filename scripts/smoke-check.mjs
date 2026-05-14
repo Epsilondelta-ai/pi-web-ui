@@ -4,6 +4,11 @@ import { join } from "node:path";
 const html = readFileSync("dist/index.html", "utf8");
 const appShellSource = readFileSync("src/components/AppShell.astro", "utf8");
 const scriptSource = readFileSync("src/scripts/app-shell.ts", "utf8");
+const terminalClientSource = readFileSync(
+  "src/scripts/terminal-client.ts",
+  "utf8",
+);
+const packageSource = readFileSync("package.json", "utf8");
 const tokenSource = readFileSync("src/styles/tokens.css", "utf8");
 const layoutSource = readFileSync("src/layouts/BaseLayout.astro", "utf8");
 const globalSource = readFileSync("src/styles/global.css", "utf8");
@@ -28,12 +33,39 @@ const checks = [
   [html.includes('data-screen="home"'), "workspace home screen exists"],
   [html.includes('data-screen="sessions"'), "sessions screen exists"],
   [html.includes('aria-label="Agent terminal"'), "terminal screen exists"],
+  [html.includes("data-terminal-shell"), "live terminal shell exists"],
+  [html.includes("data-terminal-mount"), "xterm mount exists"],
+  [html.includes("data-terminal-status"), "terminal status label exists"],
+  [
+    html.includes("data-mock-transcript-disabled"),
+    "live mode disables mock transcript marker",
+  ],
   [html.includes("data-prompt-input"), "editable textarea prompt exists"],
   [
     appShellSource.includes("<textarea") && appShellSource.includes("&gt;"),
     "prompt uses textarea with > prefix",
   ],
   [html.includes("data-key"), "keypad controls exist"],
+  [
+    packageSource.includes("@xterm/xterm") &&
+      packageSource.includes("@xterm/addon-fit"),
+    "xterm dependencies are declared",
+  ],
+  [
+    terminalClientSource.includes("new Terminal") &&
+      terminalClientSource.includes("new FitAddon"),
+    "terminal client uses xterm.js and FitAddon",
+  ],
+  [
+    terminalClientSource.includes("term.write(message.data)") &&
+      !terminalClientSource.includes("innerHTML"),
+    "terminal bytes go to xterm without raw HTML injection",
+  ],
+  [
+    !scriptSource.includes("appendMessage") &&
+      scriptSource.includes("pi-terminal:send"),
+    "app shell sends live terminal input instead of appending mock rows",
+  ],
   [html.includes("data-workspace-dialog"), "workspace bottom sheet exists"],
   [html.includes("data-approval-dialog"), "approval modal exists"],
   [html.includes("diff-preview"), "approval diff preview exists"],

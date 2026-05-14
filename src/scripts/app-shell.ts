@@ -9,7 +9,8 @@ const qsa = <T extends Element>(selector: string) =>
 
 const shell = qs<HTMLElement>("[data-app-shell]");
 const phone = qs<HTMLElement>(".phone-frame");
-const terminal = qs<HTMLElement>("[data-terminal]");
+const terminalShell = qs<HTMLElement>("[data-terminal-shell]");
+const terminalIdentity = qs<HTMLElement>("[data-terminal-identity]");
 const title = qs<HTMLElement>("[data-active-title]");
 const eyebrow = qs<HTMLElement>("[data-header-eyebrow]");
 const state = qs<HTMLElement>("[data-agent-state]");
@@ -71,17 +72,14 @@ const setBackgroundInert = (dialog: HTMLElement | null) => {
   });
 };
 
-const appendMessage = (kind: string, label: string, body: string) => {
-  const article = document.createElement("article");
-  const prefix = document.createElement("b");
-  const paragraph = document.createElement("p");
+const sendTerminalInput = (data: string) => {
+  window.dispatchEvent(
+    new CustomEvent("pi-terminal:send", { detail: { data } }),
+  );
+};
 
-  article.className = `message ${kind}`;
-  prefix.textContent = label;
-  paragraph.textContent = body;
-  article.append(prefix, paragraph);
-  terminal.append(article);
-  terminal.scrollTop = terminal.scrollHeight;
+const reconnectTerminal = () => {
+  window.dispatchEvent(new CustomEvent("pi-terminal:reconnect"));
 };
 
 const setView = (view: string) => {
@@ -160,8 +158,8 @@ const flashKey = (button: HTMLButtonElement) => {
   window.setTimeout(() => button.classList.remove("pressed"), 180);
 };
 
-// @MX:WARN: [AUTO] Central event delegation handles compact static prototype interactions.
-// @MX:REASON: Many UI controls share one mobile shell; branching is intentional until backend/router exists.
+// @MX:WARN: [AUTO] Central event delegation still owns compact shell controls around live terminal.
+// @MX:REASON: Shell buttons, dialogs, and terminal CustomEvents share one mobile frame; backend integration must not reintroduce mock transcript writes.
 shell.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -183,11 +181,9 @@ shell.addEventListener("click", (event) => {
     setExclusiveActive("[data-workspace]", button, "aria-pressed");
     title.textContent = `${button.dataset.name} / sessions`;
     state.textContent = "workspace";
-    appendMessage(
-      "agent",
-      "pi >",
-      `Switched workspace to ${button.dataset.path}.`,
-    );
+    terminalShell.dataset.workspaceId = button.dataset.workspace;
+    terminalShell.dataset.workspacePath = button.dataset.path ?? ".";
+    terminalIdentity.textContent = `${button.dataset.name} / sessions`;
     setView("sessions");
   }
 
@@ -196,12 +192,10 @@ shell.addEventListener("click", (event) => {
     const activeWorkspace = qs<HTMLElement>("[data-workspace].active");
     title.textContent = `${activeWorkspace.dataset.name} / ${button.dataset.session}`;
     state.textContent = button.dataset.state ?? "ready";
-    appendMessage(
-      "agent",
-      "pi >",
-      `Loaded session ${button.dataset.session} on ${button.dataset.branch}.`,
-    );
+    terminalShell.dataset.sessionId = button.dataset.session;
+    terminalIdentity.textContent = `${activeWorkspace.dataset.name} / ${button.dataset.session}`;
     setView("terminal");
+    reconnectTerminal();
   }
 
   if (button.dataset.action === "toggle-settings") {
@@ -220,7 +214,8 @@ shell.addEventListener("click", (event) => {
     closeDialog(workspaceDialog);
     title.textContent = "new workspace / sessions";
     state.textContent = "workspace";
-    appendMessage("agent", "pi >", `Opened workspace path ${pathInput.value}.`);
+    terminalShell.dataset.workspacePath = pathInput.value;
+    terminalIdentity.textContent = "new workspace / sessions";
     setView("sessions");
   }
 
@@ -228,7 +223,7 @@ shell.addEventListener("click", (event) => {
     closeDialog(workspaceDialog);
   }
 
-  if (button.dataset.action === "run-tool" || button.dataset.key === "enter") {
+  if (button.dataset.action === "run-tool") {
     openDialog(approval);
     state.textContent = "approval";
   }
@@ -240,25 +235,24 @@ shell.addEventListener("click", (event) => {
   if (button.dataset.action === "approve-change") {
     closeDialog(approval);
     state.textContent = "approved";
-    appendMessage(
-      "agent",
-      "pi >",
-      "Approved locally. Backend adapter will apply real patches later.",
-    );
   }
 
   if (button.dataset.action === "reject-change") {
     closeDialog(approval);
     state.textContent = "rejected";
-    appendMessage(
-      "agent",
-      "pi >",
-      "Rejected locally. No files changed in demo state.",
-    );
   }
 
   if (button.dataset.key) {
     flashKey(button);
+    const keyMap: Record<string, string> = {
+      left: "\u001b[D",
+      down: "\u001b[B",
+      up: "\u001b[A",
+      right: "\u001b[C",
+      escape: "\u001b",
+      enter: "\r",
+    };
+    sendTerminalInput(keyMap[button.dataset.key] ?? "");
     if (button.dataset.key === "escape") closeDialog();
   }
 });
@@ -305,10 +299,9 @@ promptForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = promptInput.value.trim();
   if (!value) return;
-  appendMessage("user", "you >", value);
-  appendMessage("agent", "pi >", `Queued prompt: ${value}`);
+  sendTerminalInput(`${value}\r`);
   promptInput.value = "";
-  state.textContent = "queued";
+  state.textContent = "live";
   setView("terminal");
 });
 

@@ -2,8 +2,11 @@
 
 - plan_complete_at: 2026-05-14T00:00:00Z
 - plan_status: audit-ready
-- revision_after_audit_at: 2026-05-14T00:00:00Z
-- audit_report_addressed: .moai/reports/plan-audit/SPEC-TERM-001-review-1.md
+- run_started_at: 2026-05-14T11:54:49Z
+- run_completed_at: 2026-05-14T11:54:49Z
+- run_status: implemented
+- implementation_branch: plan/SPEC-TERM-001-terminal-rendering
+- implementation_note: User explicitly chose stacked run work on plan branch.
 
 ## Created Artifacts
 
@@ -15,27 +18,21 @@
 - spec-compact.md
 - progress.md
 
-## Revision Notes
+## Implementation Summary
 
-- Quoted frontmatter date strings in `spec.md`.
-- Preserved canonical MoAI priority value `High`.
-- Converted requirements to EARS-style wording where possible.
-- Separated architectural constraints from normative requirements.
-- Added explicit EARS acceptance criteria with AC IDs and REQ references.
-- Added traceability matrix covering REQ-TERM-001 through REQ-TERM-026.
-- Resolved v1 lifecycle policy: browser WebSocket disconnect closes PTY and associated `pi` process; reconnect starts a new session.
-- Resolved endpoint/session identity: `/api/terminals/{workspaceId}/sessions/{sessionId}`.
-- Specified security policy boundaries for localhost, origins, workspace allowlist, path canonicalization, command allowlist, rejection timing, and logging.
-- Replaced vague states with observable states/events: `connecting`, `live`, `closed`, `rejected`, `error`, `terminal.started`, `terminal.resized`, `terminal.closed`, `terminal.rejected`, `terminal.error`.
-- Split affected files into existing, required new, and optional sections.
+- Added Astro xterm.js terminal client.
+- Added Go local backend with PTY + WebSocket bridge.
+- Added origin, workspace, and command validation before terminal execution.
+- Added backend tests for rejection, malformed protocol handling, resize, input, and disconnect cleanup.
+- Added smoke checks for xterm mount, dependencies, and no raw HTML terminal path.
 
-## Notes
+## Verification
 
-Planning only. No implementation code, GitHub issue, or branch created.
-
-## Plan Audit Review 2 Revision
-
-- Moved exact route and lifecycle event names out of normative REQ text into Terminal Protocol / Observable Events sections.
-- Changed default bind/origin policy to `127.0.0.1` bind and same-origin-only WebSocket default.
-- Added `go.sum` to affected files for Go dependencies.
-- Updated acceptance and compact SPEC wording to match revised REQs.
+- npm run format: PASS
+- npm run build: PASS, Astro check 0 errors / 0 warnings / 0 hints
+- npm run smoke: PASS, 32 checks
+- go test ./...: PASS
+- go test ./... -cover: PASS; core packages >=85% (`internal/config` 85.6%, `internal/server` 100.0%, `internal/terminal` 86.8%)
+- go vet ./...: PASS
+- evaluator-active final verdict: PASS
+- npm audit --audit-level=high: PASS for high/critical; 5 existing moderate yaml-language-server chain advisories remain

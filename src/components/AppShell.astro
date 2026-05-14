@@ -162,37 +162,37 @@ const recentPaths = [
       >
         <div class="run-hud">
           <span class="live-dot"></span>
-          <strong data-agent-state>running</strong>
-          <span>edit/app-shell</span>
-          <span class="hud-meter">ctx ▉▉▉▉▉▉░░</span>
+          <strong data-agent-state data-terminal-state>connecting</strong>
+          <span data-terminal-identity>pi-web-ui / frontend-first</span>
+          <span class="hud-meter">pty ▉▉▉▉▉▉░░</span>
         </div>
 
-        <div class="terminal" data-terminal>
-          <article class="message user">
-            <b>you &gt;</b>
-            <p>Use Claude Design zip and build frontend first.</p>
-          </article>
-          <article class="message agent">
-            <b>pi &gt;</b>
-            <p>
-              Restored mobile-first phone shell. Workspace home, sessions,
-              prompt, approvals, and overlays are local-only until Go backend.
+        <div
+          class="terminal terminal-live"
+          data-terminal-shell
+          data-live-terminal="true"
+          data-mock-transcript-disabled="true"
+          data-workspace-id="pi-web-ui"
+          data-session-id="frontend-first"
+          data-workspace-path="."
+          aria-label="Live pi terminal"
+        >
+          <div class="terminal-status" aria-live="polite">
+            <span class="status-label">state</span>
+            <strong data-terminal-status>connecting</strong>
+            <small data-terminal-error>waiting for local Go backend</small>
+          </div>
+          <div
+            class="xterm-mount"
+            data-terminal-mount
+            role="application"
+            aria-label="xterm.js terminal emulator"
+          >
+            <p class="terminal-fallback">
+              xterm.js terminal loads here. Terminal bytes are written to the
+              emulator, never injected as HTML.
             </p>
-          </article>
-          <article class="message think">
-            <b>…</b>
-            <p>
-              Matching 375×812 frame, dense terminal rows, ANSI green accents,
-              and bottom prompt grammar from source design.
-            </p>
-          </article>
-          <article class="tool-card" data-tool-card>
-            <header><span></span><b>bash</b><em>npm run build</em></header>
-            <pre>astro check
-astro build
-✓ dist ready</pre>
-            <footer><span>✓ static</span><span>0.9s</span></footer>
-          </article>
+          </div>
         </div>
       </section>
     </main>
@@ -372,3 +372,4 @@ astro build
 </section>
 
 <script src="../scripts/app-shell.ts"></script>
+<script src="../scripts/terminal-client.ts"></script>

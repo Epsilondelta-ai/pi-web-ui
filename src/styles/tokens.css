@@ -48,6 +48,10 @@
   --radius-2: 4px;
   --radius-3: 6px;
   --shadow-glow: 0 0 0 1px var(--accent), 0 0 18px rgba(0, 255, 136, 0.24);
+  --terminal-bg: #0a0a0a;
+  --terminal-fg: #d4d4d4;
+  --terminal-cursor: #00ff88;
+  --terminal-selection: rgba(0, 255, 136, 0.24);
   --shadow-modal:
     0 24px 80px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
