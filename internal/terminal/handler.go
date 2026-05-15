@@ -16,6 +16,7 @@ import (
 type Handler struct {
 	Config config.Config
 	Runner Runner
+	Tmux   TmuxManager
 	Events EventSink
 }
 
@@ -35,13 +36,22 @@ type serverMessage struct {
 	Data        string `json:"data,omitempty"`
 }
 
-// @MX:ANCHOR: [AUTO] terminal websocket handler owns validation, PTY lifecycle, and browser protocol.
-// @MX:REASON: Frontend terminal client, server routes, and tests all depend on this lifecycle boundary.
+// @MX:ANCHOR: [AUTO] terminal websocket handler owns validation, PTY/tmux lifecycle, and browser protocol.
+// @MX:REASON: Frontend terminal client, server routes, tmux attach policy, and tests all depend on this lifecycle boundary.
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	events := h.events()
 	workspaceID, sessionID, ok := parseTerminalRoute(r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+
+	mode := terminalMode(r)
+	if mode == "" {
+		mode = "pty"
+	}
+	if mode != "pty" && mode != "tmux" {
+		h.rejectHTTP(w, http.StatusForbidden, Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventRejected, Code: string(config.RejectInvalidSession)})
 		return
 	}
 
@@ -62,6 +72,21 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if mode == "tmux" {
+		if !validTmuxWebSocketAction(r.URL.Query().Get("action")) {
+			h.rejectHTTP(w, http.StatusForbidden, Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventRejected, Code: string(config.RejectInvalidSession)})
+			return
+		}
+		if _, err := ManagedSessionName(h.Config.TmuxManagedPrefix, workspaceID, sessionID); err != nil {
+			h.rejectHTTP(w, http.StatusForbidden, Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventRejected, Code: string(config.RejectInvalidSession)})
+			return
+		}
+		if err := h.Config.ValidateTmuxBinary(); err != nil {
+			h.rejectHTTP(w, http.StatusServiceUnavailable, Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventRejected, Code: string(config.RejectTmuxUnavailable)})
+			return
+		}
+	}
+
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(req *http.Request) bool {
 			return h.Config.ValidateOrigin(req.Header.Get("Origin"))
@@ -77,20 +102,26 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	runner := h.Runner
-	if runner == nil {
-		runner = PTYRunner{}
-	}
-	session, err := runner.Start(ctx, StartRequest{WorkspaceID: workspaceID, SessionID: sessionID, Workspace: workspace, Command: command, Cols: 80, Rows: 24})
+	request := StartRequest{WorkspaceID: workspaceID, SessionID: sessionID, Workspace: workspace, Command: command, Cols: 80, Rows: 24}
+	session, err := h.startSession(ctx, mode, r.URL.Query().Get("action"), request)
 	if err != nil {
-		event := Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventRejected, Code: "start_failed"}
+		code := "start_failed"
+		eventName := EventRejected
+		if errors.Is(err, ErrStaleTmuxSession) {
+			code = "stale_session"
+			eventName = EventStale
+		}
+		if errors.Is(err, ErrInvalidTmuxSession) {
+			code = string(config.RejectInvalidSession)
+		}
+		event := Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: eventName, Code: code}
 		events.Emit(event)
 		_ = conn.WriteJSON(messageFromEvent(event))
 		return
 	}
 
 	var writeMu sync.Mutex
-	var closedOnce sync.Once
+	var lifecycleOnce sync.Once
 	writeJSON := func(message serverMessage) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
@@ -108,14 +139,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		events.Emit(event)
 		_ = writeJSON(messageFromEvent(event))
 	}
-	emitClosed := func() {
-		closedOnce.Do(func() {
-			emit(Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventClosed})
+	finishEventName := EventClosed
+	if mode == "tmux" {
+		finishEventName = EventDetached
+	}
+	emitLifecycleEnd := func() {
+		lifecycleOnce.Do(func() {
+			emit(Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: finishEventName})
 		})
 	}
 
 	emit(Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventStarted})
 
+	clientDone := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -128,7 +164,18 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err != nil {
-				emitClosed()
+				if mode == "tmux" {
+					select {
+					case <-clientDone:
+						emitLifecycleEnd()
+					default:
+						lifecycleOnce.Do(func() {
+							emit(Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventKilled})
+						})
+					}
+				} else {
+					emitLifecycleEnd()
+				}
 				_ = conn.Close()
 				return
 			}
@@ -136,19 +183,69 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	readErr := h.readClientMessages(conn, session, emit)
+	close(clientDone)
 	if readErr != nil && !isExpectedClose(readErr) {
 		emit(Event{WorkspaceID: workspaceID, SessionID: sessionID, Name: EventError, Code: "websocket_read_failed"})
 	}
 
 	cancel()
 	_ = session.Close()
-	_ = session.Kill()
+	if mode == "pty" {
+		_ = session.Kill()
+	}
+	doneCompleted := false
 	select {
 	case <-done:
+		doneCompleted = true
 	case <-time.After(2 * time.Second):
 	}
-	_ = session.Wait()
-	emitClosed()
+	if doneCompleted {
+		_ = session.Wait()
+	}
+	emitLifecycleEnd()
+}
+
+func (h Handler) startSession(ctx context.Context, mode, action string, request StartRequest) (Session, error) {
+	if mode == "tmux" {
+		manager := h.tmuxManager()
+		if action == "attach" {
+			return manager.Attach(ctx, request)
+		}
+		return manager.Start(ctx, request)
+	}
+	runner := h.Runner
+	if runner == nil {
+		runner = PTYRunner{}
+	}
+	return runner.Start(ctx, request)
+}
+
+func (h Handler) tmuxManager() TmuxManager {
+	if h.Tmux != nil {
+		return h.Tmux
+	}
+	if manager, ok := h.Runner.(TmuxManager); ok {
+		return manager
+	}
+	runner := NewTmuxRunner(h.Config.TmuxBinaryPath, h.Config.TmuxManagedPrefix)
+	return runner
+}
+
+func terminalMode(r *http.Request) string {
+	mode := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("mode")))
+	if mode == "" {
+		mode = strings.TrimSpace(strings.ToLower(r.URL.Query().Get("terminalMode")))
+	}
+	return mode
+}
+
+func validTmuxWebSocketAction(action string) bool {
+	switch strings.TrimSpace(strings.ToLower(action)) {
+	case "", "start", "attach":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h Handler) readClientMessages(conn *websocket.Conn, session Session, emit func(Event)) error {
@@ -183,7 +280,7 @@ func (h Handler) readClientMessages(conn *websocket.Conn, session Session, emit 
 	}
 }
 
-// @MX:WARN: [AUTO] Origin, workspace, and command rejection must happen before PTY launch.
+// @MX:WARN: [AUTO] Origin, workspace, command, and tmux identity rejection must happen before process launch.
 // @MX:REASON: A bypass turns this local web UI into arbitrary local command execution.
 func (h Handler) rejectHTTP(w http.ResponseWriter, status int, event Event) {
 	h.events().Emit(event)

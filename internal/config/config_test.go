@@ -15,6 +15,9 @@ func TestDefaultConfigUsesLocalhostOnly(t *testing.T) {
 	t.Setenv("PI_WEB_EXTRA_ORIGINS", "")
 	t.Setenv("PI_WEB_WORKSPACE_ROOTS", t.TempDir())
 	t.Setenv("PI_WEB_COMMAND", "")
+	t.Setenv("PI_WEB_TMUX_ENABLED", "")
+	t.Setenv("PI_WEB_TMUX_BINARY", "")
+	t.Setenv("PI_WEB_TMUX_PREFIX", "")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -29,8 +32,44 @@ func TestDefaultConfigUsesLocalhostOnly(t *testing.T) {
 	if cfg.ServedOrigin != "http://127.0.0.1:8787" {
 		t.Fatalf("ServedOrigin = %q", cfg.ServedOrigin)
 	}
+	if !cfg.TmuxEnabled || cfg.TmuxBinaryPath != "tmux" || cfg.TmuxManagedPrefix != "piweb-" {
+		t.Fatalf("tmux defaults = enabled %v binary %q prefix %q", cfg.TmuxEnabled, cfg.TmuxBinaryPath, cfg.TmuxManagedPrefix)
+	}
 	if cfg.ValidateOrigin("http://localhost:8787") {
 		t.Fatalf("localhost origin must not match 127.0.0.1 same-origin default")
+	}
+}
+
+func TestLoadFromEnvParsesTmuxFields(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PI_WEB_HOST", "127.0.0.1")
+	t.Setenv("PI_WEB_PORT", "8787")
+	t.Setenv("PI_WEB_ORIGIN", "http://127.0.0.1:8787")
+	t.Setenv("PI_WEB_WORKSPACE_ROOTS", root)
+	t.Setenv("PI_WEB_TMUX_ENABLED", "false")
+	t.Setenv("PI_WEB_TMUX_BINARY", "/bin/echo")
+	t.Setenv("PI_WEB_TMUX_PREFIX", "managed-")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+	if cfg.TmuxEnabled || cfg.TmuxBinaryPath != "/bin/echo" || cfg.TmuxManagedPrefix != "managed-" {
+		t.Fatalf("tmux env fields = enabled %v binary %q prefix %q", cfg.TmuxEnabled, cfg.TmuxBinaryPath, cfg.TmuxManagedPrefix)
+	}
+}
+
+func TestValidateTmuxBinaryRejectsMissingBinary(t *testing.T) {
+	cfg := Config{TmuxEnabled: true, TmuxBinaryPath: "definitely-missing-pi-web-tmux", TmuxManagedPrefix: "piweb-"}
+	if err := cfg.ValidateTmuxBinary(); err == nil {
+		t.Fatalf("missing tmux binary accepted")
+	}
+}
+
+func TestValidateTmuxBinaryRejectsDisabledMode(t *testing.T) {
+	cfg := Config{TmuxEnabled: false, TmuxBinaryPath: "tmux", TmuxManagedPrefix: "piweb-"}
+	if err := cfg.ValidateTmuxBinary(); err == nil {
+		t.Fatalf("disabled tmux mode accepted")
 	}
 }
 
@@ -205,5 +244,47 @@ func TestSplitList(t *testing.T) {
 	parts := splitList(" a, b\n c ,, ")
 	if strings.Join(parts, "|") != "a|b|c" {
 		t.Fatalf("splitList = %#v", parts)
+	}
+}
+
+func TestValidateTmuxBinaryRejectsExistingAbsoluteNonExecutableFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows executable permission semantics differ")
+	}
+	path := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(path, []byte("not executable"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{TmuxEnabled: true, TmuxBinaryPath: path, TmuxManagedPrefix: "piweb-"}
+	if err := cfg.ValidateTmuxBinary(); err == nil {
+		t.Fatalf("non-executable tmux binary accepted")
+	}
+}
+
+func TestValidateTmuxBinaryAcceptsExistingExecutablePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows executable permission semantics differ")
+	}
+	path := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{TmuxEnabled: true, TmuxBinaryPath: path, TmuxManagedPrefix: "piweb-"}
+	if err := cfg.ValidateTmuxBinary(); err != nil {
+		t.Fatalf("executable tmux binary rejected: %v", err)
+	}
+}
+
+func TestNormalizedRejectsMalformedTmuxPrefix(t *testing.T) {
+	_, err := (Config{
+		Host:              "127.0.0.1",
+		Port:              "8787",
+		ServedOrigin:      "http://127.0.0.1:8787",
+		WorkspaceRoots:    []string{t.TempDir()},
+		Command:           "pi",
+		TmuxManagedPrefix: " piweb- ",
+	}).Normalized()
+	if err == nil {
+		t.Fatalf("malformed tmux prefix accepted")
 	}
 }

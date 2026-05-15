@@ -153,6 +153,29 @@ const recentPaths = [
             ))
           }
         </div>
+
+        <div class="list-block tmux-session-panel" data-tmux-detached-state>
+          <div class="list-label">persistent tmux sessions</div>
+          <p>
+            Detached sessions stay alive after browser disconnect. Attach to
+            continue, or kill managed sessions only.
+          </p>
+          <ul data-tmux-session-list aria-live="polite">
+            <li data-tmux-session-row="piweb-pi-web-ui-frontend-first">
+              <span>frontend-first · detached</span>
+              <button
+                type="button"
+                data-tmux-attach-action="piweb-pi-web-ui-frontend-first"
+                >attach</button
+              >
+              <button
+                type="button"
+                data-tmux-kill-action="piweb-pi-web-ui-frontend-first"
+                >kill</button
+              >
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section
@@ -175,6 +198,8 @@ const recentPaths = [
           data-workspace-id="pi-web-ui"
           data-session-id="frontend-first"
           data-workspace-path="."
+          data-terminal-mode="tmux"
+          data-tmux-action="start"
           aria-label="Live pi terminal"
         >
           <div class="terminal-status" aria-live="polite">

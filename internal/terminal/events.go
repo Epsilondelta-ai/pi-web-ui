@@ -6,6 +6,20 @@ const (
 	EventClosed   = "terminal.closed"
 	EventRejected = "terminal.rejected"
 	EventError    = "terminal.error"
+
+	EventDetached = "terminal.detached"
+	EventKilled   = "terminal.killed"
+	EventStale    = "terminal.stale"
+)
+
+type LifecycleState string
+
+const (
+	LifecycleLive     LifecycleState = "live"
+	LifecycleDetached LifecycleState = "detached"
+	LifecycleKilled   LifecycleState = "killed"
+	LifecycleStale    LifecycleState = "stale"
+	LifecycleError    LifecycleState = "error"
 )
 
 type Event struct {

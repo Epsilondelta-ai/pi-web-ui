@@ -78,8 +78,10 @@ const sendTerminalInput = (data: string) => {
   );
 };
 
-const reconnectTerminal = () => {
-  window.dispatchEvent(new CustomEvent("pi-terminal:reconnect"));
+const reconnectTerminal = (action = "start") => {
+  window.dispatchEvent(
+    new CustomEvent("pi-terminal:reconnect", { detail: { action } }),
+  );
 };
 
 const setView = (view: string) => {
@@ -187,12 +189,38 @@ shell.addEventListener("click", (event) => {
     setView("sessions");
   }
 
+  if (button.dataset.tmuxAttachAction) {
+    terminalShell.dataset.terminalMode = "tmux";
+    terminalShell.dataset.tmuxAction = "attach";
+    window.dispatchEvent(
+      new CustomEvent("pi-terminal:attach", {
+        detail: {
+          name: button.dataset.tmuxAttachAction,
+          sessionId: button.dataset.tmuxAttachIdentity,
+        },
+      }),
+    );
+    state.textContent = "attaching";
+    setView("terminal");
+  }
+
+  if (button.dataset.tmuxKillAction) {
+    window.dispatchEvent(
+      new CustomEvent("pi-terminal:kill", {
+        detail: { name: button.dataset.tmuxKillAction },
+      }),
+    );
+    state.textContent = "killing";
+  }
+
   if (button.dataset.session) {
     setExclusiveActive("[data-session]", button, "aria-current");
     const activeWorkspace = qs<HTMLElement>("[data-workspace].active");
     title.textContent = `${activeWorkspace.dataset.name} / ${button.dataset.session}`;
     state.textContent = button.dataset.state ?? "ready";
     terminalShell.dataset.sessionId = button.dataset.session;
+    terminalShell.dataset.terminalMode = "tmux";
+    terminalShell.dataset.tmuxAction = "start";
     terminalIdentity.textContent = `${activeWorkspace.dataset.name} / ${button.dataset.session}`;
     setView("terminal");
     reconnectTerminal();

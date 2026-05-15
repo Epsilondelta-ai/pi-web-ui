@@ -36,6 +36,21 @@ The backend exposes the terminal WebSocket route:
 
 The browser terminal connects this route to xterm.js. The Go backend starts the configured `pi` command through a PTY and bridges terminal bytes over WebSocket.
 
+Direct PTY mode preserves close-on-disconnect behavior. Managed tmux mode is additive and can be requested at session start:
+
+```text
+/api/terminals/{workspaceId}/sessions/{sessionId}?workspace=<path>&mode=tmux
+```
+
+Managed tmux sessions survive browser disconnects. Reconnect with `action=attach` to attach an existing session. Session management is intentionally narrow: start, attach, list, and kill only. No arbitrary tmux console is exposed.
+
+Managed tmux REST helpers:
+
+```text
+GET  /api/tmux/sessions
+POST /api/tmux/sessions/{managedName}/kill
+```
+
 ## Local configuration
 
 Environment variables:
@@ -47,7 +62,10 @@ Environment variables:
 | `PI_WEB_ORIGIN`          | `http://127.0.0.1:8787`   | Served UI origin                        |
 | `PI_WEB_EXTRA_ORIGINS`   | empty                     | Comma-separated explicit dev origins    |
 | `PI_WEB_WORKSPACE_ROOTS` | current working directory | Comma-separated allowed workspace roots |
-| `PI_WEB_COMMAND`         | `pi`                      | Allowed command/path to run in the PTY  |
+| `PI_WEB_COMMAND`         | `pi`                      | Allowed command/path to run in terminal |
+| `PI_WEB_TMUX_ENABLED`    | `true`                    | Enable managed tmux mode                |
+| `PI_WEB_TMUX_BINARY`     | `tmux`                    | tmux binary path or lookup name         |
+| `PI_WEB_TMUX_PREFIX`     | `piweb-`                  | Managed session name prefix             |
 
 Security defaults:
 
@@ -57,7 +75,12 @@ Security defaults:
 - Canonicalizes workspace paths before allowlist comparison.
 - Rejects command overrides; users cannot choose arbitrary commands.
 - Does not log raw terminal input/output streams by default.
-- V1 lifecycle is close-on-disconnect. Reconnect starts a new process.
+- Direct PTY lifecycle is close-on-disconnect. Reconnect starts a new process.
+- Managed tmux lifecycle detaches on browser disconnect and preserves child process lifetime.
+- Managed tmux operations reject sessions without the configured `PI_WEB_TMUX_PREFIX`.
+- Tmux session identities are sanitized before execution.
+- Backend constructs tmux commands as argument vectors; no shell string is built from user input.
+- Tmux errors sent to clients use non-secret lifecycle events and reason codes only.
 
 ## Design mapping
 
@@ -78,5 +101,5 @@ No raw HTML from the zip is injected at runtime. Terminal bytes are written to x
 - No auth.
 - No database persistence.
 - No multi-user collaboration.
-- No detached/reconnectable terminal sessions.
+- Tmux-backed detached/reconnectable terminal sessions are supported locally when tmux is enabled.
 - No SSH/remote terminal support.

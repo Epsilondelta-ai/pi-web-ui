@@ -36,6 +36,16 @@ const checks = [
   [html.includes("data-terminal-shell"), "live terminal shell exists"],
   [html.includes("data-terminal-mount"), "xterm mount exists"],
   [html.includes("data-terminal-status"), "terminal status label exists"],
+  [html.includes("data-tmux-session-list"), "tmux session list marker exists"],
+  [
+    html.includes("data-tmux-detached-state"),
+    "tmux detached state marker exists",
+  ],
+  [
+    html.includes("data-tmux-attach-action"),
+    "tmux attach action marker exists",
+  ],
+  [html.includes("data-tmux-kill-action"), "tmux kill action marker exists"],
   [
     html.includes("data-mock-transcript-disabled"),
     "live mode disables mock transcript marker",
@@ -62,9 +72,20 @@ const checks = [
     "terminal bytes go to xterm without raw HTML injection",
   ],
   [
+    terminalClientSource.includes('"terminal.detached"') &&
+      terminalClientSource.includes("pi-terminal:attach") &&
+      terminalClientSource.includes("/api/tmux/sessions"),
+    "terminal client handles tmux detach, attach, and kill lifecycle",
+  ],
+  [
     !scriptSource.includes("appendMessage") &&
       scriptSource.includes("pi-terminal:send"),
     "app shell sends live terminal input instead of appending mock rows",
+  ],
+  [
+    scriptSource.includes("tmuxAttachAction") &&
+      scriptSource.includes("tmuxKillAction"),
+    "app shell wires tmux attach and kill actions",
   ],
   [html.includes("data-workspace-dialog"), "workspace bottom sheet exists"],
   [html.includes("data-approval-dialog"), "approval modal exists"],

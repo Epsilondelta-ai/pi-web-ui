@@ -143,11 +143,14 @@ func testConfig(t *testing.T) config.Config {
 		t.Fatal(err)
 	}
 	cfg, err := (config.Config{
-		Host:           "127.0.0.1",
-		Port:           "8787",
-		ServedOrigin:   "http://pi-web.test",
-		WorkspaceRoots: []string{root},
-		Command:        "pi",
+		Host:              "127.0.0.1",
+		Port:              "8787",
+		ServedOrigin:      "http://pi-web.test",
+		WorkspaceRoots:    []string{root},
+		Command:           "pi",
+		TmuxEnabled:       true,
+		TmuxBinaryPath:    "/bin/echo",
+		TmuxManagedPrefix: "piweb-",
 	}).Normalized()
 	if err != nil {
 		t.Fatal(err)
@@ -331,6 +334,270 @@ func TestProtocolHandlesInputResizeMalformedAndDisconnectCleanup(t *testing.T) {
 	}
 }
 
+type fakeTmuxManager struct {
+	fakeRunner
+	attachCalls int
+	attachErr   error
+	killCalls   []string
+	listResult  []TmuxSessionInfo
+}
+
+func (m *fakeTmuxManager) Attach(_ context.Context, request StartRequest) (Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.attachCalls++
+	m.request = request
+	if m.attachErr != nil {
+		return nil, m.attachErr
+	}
+	m.session = newFakeSession()
+	return m.session, nil
+}
+func (m *fakeTmuxManager) Kill(_ context.Context, name string) (LifecycleState, error) {
+	m.killCalls = append(m.killCalls, name)
+	return LifecycleKilled, nil
+}
+func (m *fakeTmuxManager) List(context.Context) ([]TmuxSessionInfo, error) {
+	return m.listResult, nil
+}
+
+type eofSession struct {
+	mu         sync.Mutex
+	closeCalls int
+	waitCalls  int
+}
+
+func (s *eofSession) Read([]byte) (int, error)    { return 0, io.EOF }
+func (s *eofSession) Write(p []byte) (int, error) { return len(p), nil }
+func (s *eofSession) Resize(uint16, uint16) error { return nil }
+func (s *eofSession) Kill() error                 { return nil }
+func (s *eofSession) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCalls++
+	return nil
+}
+func (s *eofSession) Wait() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.waitCalls++
+	return nil
+}
+func (s *eofSession) released() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCalls > 0 && s.waitCalls > 0
+}
+func (s *eofSession) counts() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCalls, s.waitCalls
+}
+
+type eofTmuxManager struct {
+	fakeTmuxManager
+	session *eofSession
+}
+
+func (m *eofTmuxManager) Start(_ context.Context, request StartRequest) (Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.starts++
+	m.request = request
+	return m.session, nil
+}
+
+func TestHandlerStartsTmuxModeWithoutAffectingPTYDefault(t *testing.T) {
+	cfg := testConfig(t)
+	ptyRunner := &fakeRunner{}
+	tmuxRunner := &fakeTmuxManager{}
+	sink := &recordingSink{}
+	server := httptest.NewServer(Handler{Config: cfg, Runner: ptyRunner, Tmux: tmuxRunner, Events: sink})
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/terminals/ws/sessions/s1?mode=tmux&workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial tmux: %v", err)
+	}
+	if _, _, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("read started: %v", err)
+	}
+	_ = conn.Close()
+	if !eventually(func() bool { return tmuxRunner.startCount() == 1 }) {
+		t.Fatalf("tmux runner not used")
+	}
+	if ptyRunner.startCount() != 0 {
+		t.Fatalf("PTY runner used for tmux mode")
+	}
+
+	server2 := httptest.NewServer(Handler{Config: cfg, Runner: ptyRunner, Tmux: tmuxRunner, Events: sink})
+	defer server2.Close()
+	ptyURL := "ws" + strings.TrimPrefix(server2.URL, "http") + "/api/terminals/ws/sessions/s2?workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	ptyConn, _, err := websocket.DefaultDialer.Dial(ptyURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial pty: %v", err)
+	}
+	_ = ptyConn.Close()
+	if !eventually(func() bool { return ptyRunner.startCount() > 0 }) {
+		t.Fatalf("PTY runner not used by default")
+	}
+}
+
+func TestHandlerRejectsTmuxUnavailableBeforeRunnerStarts(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.TmuxBinaryPath = "definitely-missing-pi-web-tmux"
+	tmuxRunner := &fakeTmuxManager{}
+	sink := &recordingSink{}
+	handler := Handler{Config: cfg, Tmux: tmuxRunner, Events: sink}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/terminals/ws/sessions/s1?mode=tmux&workspace="+url.QueryEscape(cfg.WorkspaceRoots[0]), nil)
+	req.Header.Set("Origin", cfg.ServedOrigin)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", res.Code)
+	}
+	if tmuxRunner.startCount() != 0 {
+		t.Fatalf("tmux runner started despite missing binary")
+	}
+	if !sink.has(EventRejected, string(config.RejectTmuxUnavailable)) {
+		t.Fatalf("missing tmux_unavailable event")
+	}
+}
+
+func TestHandlerTmuxDisconnectEmitsDetachedWithoutKillOrClosed(t *testing.T) {
+	cfg := testConfig(t)
+	tmuxRunner := &fakeTmuxManager{}
+	sink := &recordingSink{}
+	server := httptest.NewServer(Handler{Config: cfg, Tmux: tmuxRunner, Events: sink})
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/terminals/ws/sessions/s1?mode=tmux&workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if _, _, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("read started: %v", err)
+	}
+	_ = conn.Close()
+
+	if !eventually(func() bool { return sink.has(EventDetached, "") }) {
+		t.Fatalf("missing detached event")
+	}
+	if sink.has(EventClosed, "") {
+		t.Fatalf("tmux session emitted terminal.closed")
+	}
+	if tmuxRunner.session == nil || tmuxRunner.session.killedState() {
+		t.Fatalf("tmux session killed on browser disconnect")
+	}
+}
+
+func TestHandlerTmuxSessionEOFEmitsKilledAndReleasesResources(t *testing.T) {
+	cfg := testConfig(t)
+	session := &eofSession{}
+	tmuxRunner := &eofTmuxManager{session: session}
+	sink := &recordingSink{}
+	server := httptest.NewServer(Handler{Config: cfg, Tmux: tmuxRunner, Events: sink})
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/terminals/ws/sessions/s1?mode=tmux&workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	for i := 0; i < 3; i++ {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			break
+		}
+	}
+
+	if !eventually(func() bool { return sink.has(EventKilled, "") }) {
+		t.Fatalf("missing terminal.killed event")
+	}
+	if sink.has(EventDetached, "") || sink.has(EventClosed, "") {
+		t.Fatalf("tmux EOF emitted detached/closed: %#v", sink.events)
+	}
+	if !eventually(session.released) {
+		closeCalls, waitCalls := session.counts()
+		t.Fatalf("resources not released: close=%d wait=%d", closeCalls, waitCalls)
+	}
+}
+
+func TestHandlerTmuxAttachUsesSingleAttachmentPath(t *testing.T) {
+	cfg := testConfig(t)
+	tmuxRunner := &fakeTmuxManager{}
+	server := httptest.NewServer(Handler{Config: cfg, Tmux: tmuxRunner, Events: &recordingSink{}})
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/terminals/ws/sessions/s1?mode=tmux&action=attach&workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	if _, payload, err := conn.ReadMessage(); err != nil || !strings.Contains(string(payload), EventStarted) {
+		t.Fatalf("started payload = %s err=%v", payload, err)
+	}
+	if tmuxRunner.attachCalls != 1 || tmuxRunner.startCount() != 0 {
+		t.Fatalf("attachCalls=%d starts=%d", tmuxRunner.attachCalls, tmuxRunner.startCount())
+	}
+}
+
+func TestHandlerTmuxAttachMissingSessionEmitsStaleEvent(t *testing.T) {
+	cfg := testConfig(t)
+	tmuxRunner := &fakeTmuxManager{attachErr: ErrStaleTmuxSession}
+	sink := &recordingSink{}
+	server := httptest.NewServer(Handler{Config: cfg, Tmux: tmuxRunner, Events: sink})
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/terminals/ws/sessions/missing?mode=tmux&action=attach&workspace=" + url.QueryEscape(cfg.WorkspaceRoots[0])
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{cfg.ServedOrigin}})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	_, payload, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read stale event: %v", err)
+	}
+	if !strings.Contains(string(payload), EventStale) {
+		t.Fatalf("payload = %s, want %s", payload, EventStale)
+	}
+	if !sink.has(EventStale, "stale_session") {
+		t.Fatalf("missing terminal.stale event")
+	}
+	if sink.has(EventRejected, "stale_session") {
+		t.Fatalf("stale attach emitted rejected")
+	}
+}
+
+func TestHandlerRejectsInvalidTmuxIdentityBeforeRunnerStarts(t *testing.T) {
+	cfg := testConfig(t)
+	tmuxRunner := &fakeTmuxManager{}
+	sink := &recordingSink{}
+	handler := Handler{Config: cfg, Tmux: tmuxRunner, Events: sink}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/terminals/ws/sessions/bad;name?mode=tmux&workspace="+url.QueryEscape(cfg.WorkspaceRoots[0]), nil)
+	req.Header.Set("Origin", cfg.ServedOrigin)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", res.Code)
+	}
+	if tmuxRunner.startCount() != 0 {
+		t.Fatalf("runner started for invalid tmux identity")
+	}
+	if !sink.has(EventRejected, string(config.RejectInvalidSession)) {
+		t.Fatalf("missing invalid_session event")
+	}
+}
+
 func TestProtocolReportsUnknownMessageType(t *testing.T) {
 	cfg := testConfig(t)
 	runner := &fakeRunner{}
@@ -369,4 +636,30 @@ func eventually(fn func() bool) bool {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return false
+}
+
+func TestHandlerRejectsUnsupportedTmuxWebSocketActionBeforeRunnerStarts(t *testing.T) {
+	cfg := testConfig(t)
+	for _, action := range []string{"kill", "foo"} {
+		t.Run(action, func(t *testing.T) {
+			tmuxRunner := &fakeTmuxManager{}
+			sink := &recordingSink{}
+			handler := Handler{Config: cfg, Tmux: tmuxRunner, Events: sink}
+			req := httptest.NewRequest(http.MethodGet, "/api/terminals/ws/sessions/s1?mode=tmux&action="+url.QueryEscape(action)+"&workspace="+url.QueryEscape(cfg.WorkspaceRoots[0]), nil)
+			req.Header.Set("Origin", cfg.ServedOrigin)
+			res := httptest.NewRecorder()
+
+			handler.ServeHTTP(res, req)
+
+			if res.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403", res.Code)
+			}
+			if tmuxRunner.startCount() != 0 || tmuxRunner.attachCalls != 0 {
+				t.Fatalf("tmux manager called for unsupported action: starts=%d attach=%d", tmuxRunner.startCount(), tmuxRunner.attachCalls)
+			}
+			if !sink.has(EventRejected, string(config.RejectInvalidSession)) {
+				t.Fatalf("missing invalid_session rejection event")
+			}
+		})
+	}
 }

@@ -8,6 +8,7 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "test:frontend": "node scripts/frontend-contract-test.mjs",
     "format": "prettier --plugin=prettier-plugin-astro --write \"src/**/*.{astro,css,ts}\" \"scripts/**/*.mjs\" \"*.{json,mjs,md}\"",
     "smoke": "node scripts/smoke-check.mjs"
   },

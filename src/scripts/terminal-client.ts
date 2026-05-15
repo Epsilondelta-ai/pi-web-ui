@@ -6,8 +6,17 @@ type TerminalEventName =
   | "terminal.started"
   | "terminal.resized"
   | "terminal.closed"
+  | "terminal.detached"
+  | "terminal.killed"
+  | "terminal.stale"
   | "terminal.rejected"
   | "terminal.error";
+
+type TmuxSessionInfo = {
+  name: string;
+  identity: string;
+  state: "live" | "detached" | "killed" | "stale" | "error";
+};
 
 type ServerMessage =
   | { type: "output"; data: string }
@@ -20,6 +29,9 @@ const statusText = document.querySelector<HTMLElement>(
 );
 const errorText = document.querySelector<HTMLElement>("[data-terminal-error]");
 const agentState = document.querySelector<HTMLElement>("[data-terminal-state]");
+const tmuxSessionList = document.querySelector<HTMLElement>(
+  "[data-tmux-session-list]",
+);
 
 if (shell && mount && statusText && errorText && agentState) {
   let socket: WebSocket | null = null;
@@ -59,7 +71,7 @@ if (shell && mount && statusText && errorText && agentState) {
     errorText.textContent = detail;
   };
 
-  const terminalURL = () => {
+  const terminalURL = (action = "start") => {
     const workspaceId = encodeURIComponent(
       shell.dataset.workspaceId ?? "pi-web-ui",
     );
@@ -68,7 +80,54 @@ if (shell && mount && statusText && errorText && agentState) {
     );
     const workspace = encodeURIComponent(shell.dataset.workspacePath ?? ".");
     const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-    return `${scheme}://${window.location.host}/api/terminals/${workspaceId}/sessions/${sessionId}?workspace=${workspace}`;
+    const mode = encodeURIComponent(shell.dataset.terminalMode ?? "tmux");
+    const requestedAction = encodeURIComponent(action);
+    return `${scheme}://${window.location.host}/api/terminals/${workspaceId}/sessions/${sessionId}?workspace=${workspace}&mode=${mode}&action=${requestedAction}`;
+  };
+
+  const tmuxRouteQuery = () =>
+    new URLSearchParams({
+      workspace: shell.dataset.workspacePath ?? ".",
+    }).toString();
+
+  const renderTmuxSessions = (sessions: TmuxSessionInfo[]) => {
+    if (!tmuxSessionList) return;
+    tmuxSessionList.replaceChildren();
+    for (const session of sessions) {
+      const row = document.createElement("li");
+      row.dataset.tmuxSessionRow = session.name;
+      const label = document.createElement("span");
+      label.textContent = `${session.identity} · ${session.state}`;
+      const attach = document.createElement("button");
+      attach.type = "button";
+      attach.dataset.tmuxAttachAction = session.name;
+      attach.dataset.tmuxAttachIdentity = session.identity;
+      attach.textContent = "attach";
+      const kill = document.createElement("button");
+      kill.type = "button";
+      kill.dataset.tmuxKillAction = session.name;
+      kill.textContent = "kill";
+      row.append(label, attach, kill);
+      tmuxSessionList.append(row);
+    }
+  };
+
+  const refreshTmuxSessions = async (): Promise<TmuxSessionInfo[] | null> => {
+    try {
+      const response = await fetch(`/api/tmux/sessions?${tmuxRouteQuery()}`, {
+        credentials: "same-origin",
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as {
+        sessions?: TmuxSessionInfo[];
+      };
+      const sessions = payload.sessions ?? [];
+      renderTmuxSessions(sessions);
+      return sessions;
+    } catch {
+      // Session list is advisory; terminal stream remains primary.
+      return null;
+    }
   };
 
   const sendJSON = (value: unknown) => {
@@ -104,6 +163,19 @@ if (shell && mount && statusText && errorText && agentState) {
       case "terminal.closed":
         setState("closed", "terminal session closed");
         break;
+      case "terminal.detached":
+        // @MX:NOTE: [AUTO] tmux WebSocket close is not an error; session can be attached again.
+        setState("detached", "persistent tmux session detached");
+        void refreshTmuxSessions();
+        break;
+      case "terminal.killed":
+        setState("killed", "persistent tmux session killed");
+        void refreshTmuxSessions();
+        break;
+      case "terminal.stale":
+        setState("stale", "persistent tmux session not found");
+        void refreshTmuxSessions();
+        break;
       case "terminal.rejected":
         setState("rejected", message.code ?? "session rejected");
         break;
@@ -113,14 +185,14 @@ if (shell && mount && statusText && errorText && agentState) {
     }
   };
 
-  const connect = () => {
+  const connect = (action = "start") => {
     if (socket) {
       socket.close();
       socket = null;
     }
     term.reset();
     setState("connecting", "connecting to local Go backend");
-    socket = new WebSocket(terminalURL());
+    socket = new WebSocket(terminalURL(action));
     const currentSocket = socket;
 
     socket.addEventListener("open", () => {
@@ -140,7 +212,19 @@ if (shell && mount && statusText && errorText && agentState) {
 
     socket.addEventListener("close", () => {
       if (socket !== currentSocket) return;
-      if (shell.dataset.connectionState !== "closed") {
+      if (shell.dataset.terminalMode === "tmux") {
+        const terminalState = shell.dataset.connectionState;
+        if (
+          terminalState !== "detached" &&
+          terminalState !== "rejected" &&
+          terminalState !== "error" &&
+          terminalState !== "killed" &&
+          terminalState !== "stale"
+        ) {
+          setState("detached", "persistent tmux session detached");
+        }
+        void refreshTmuxSessions();
+      } else if (shell.dataset.connectionState !== "closed") {
         setState("closed", "terminal websocket closed");
       }
     });
@@ -168,11 +252,51 @@ if (shell && mount && statusText && errorText && agentState) {
     }
   });
 
-  window.addEventListener("pi-terminal:reconnect", () => connect());
+  window.addEventListener("pi-terminal:reconnect", (event) => {
+    const detail = (event as CustomEvent<{ action?: string }>).detail;
+    connect(detail?.action ?? shell.dataset.tmuxAction ?? "start");
+    shell.dataset.tmuxAction = "start";
+  });
+  window.addEventListener("pi-terminal:attach", (event) => {
+    const detail = (event as CustomEvent<{ sessionId?: string }>).detail;
+    const identity = detail?.sessionId ?? "";
+    const workspaceId = shell.dataset.workspaceId ?? "";
+    if (identity) {
+      shell.dataset.sessionId = identity.startsWith(`${workspaceId}-`)
+        ? identity.slice(workspaceId.length + 1)
+        : identity;
+    }
+    shell.dataset.terminalMode = "tmux";
+    connect("attach");
+  });
+  window.addEventListener("pi-terminal:kill", (event) => {
+    const detail = (event as CustomEvent<{ name?: string }>).detail;
+    if (!detail?.name) return;
+    fetch(
+      `/api/tmux/sessions/${encodeURIComponent(detail.name)}/kill?${tmuxRouteQuery()}`,
+      {
+        credentials: "same-origin",
+        method: "POST",
+      },
+    )
+      .then(() => refreshTmuxSessions())
+      .catch(() => setState("error", "tmux kill request failed"));
+  });
   window.addEventListener("beforeunload", () => {
     resizeObserver?.disconnect();
     socket?.close();
   });
 
-  connect();
+  const boot = async () => {
+    if (shell.dataset.terminalMode === "tmux") {
+      const sessions = await refreshTmuxSessions();
+      if (sessions && sessions.length > 0) {
+        setState("detached", "existing tmux session available to attach");
+        return;
+      }
+    }
+    connect();
+  };
+
+  void boot();
 }
