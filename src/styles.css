@@ -932,10 +932,10 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   white-space: pre;
   margin: 0;
   user-select: none;
-  overflow-x: auto;
+  overflow: hidden;
 }
 @media (min-width: 600px) {
-  .picker-banner { font-size: 12px; }
+  .picker-banner { font-size: 11px; }
 }
 
 .picker-tag {
