@@ -3,7 +3,9 @@ package piweb
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -44,16 +46,12 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 			r.mu.Unlock()
 			cancel()
 		}()
+		user := Message{Kind: "user", Text: text}
+		_ = store.AppendMessage(sessionID, user)
+		broker.Publish(sessionID, "session.message", user)
 		broker.Publish(sessionID, "session.status", map[string]string{"status": "running"})
 
-		var emitted atomic.Int64
-		startOffset := fileSize(sessionFile)
-		tailCtx, stopTail := context.WithCancel(ctx)
-		defer stopTail()
-		tailDone := make(chan struct{})
-		go tailSessionFile(tailCtx, broker, store, sessionID, sessionFile, startOffset, &emitted, tailDone)
-
-		args := []string{"--session", sessionFile, "--print", text}
+		args := []string{"--session", sessionFile, "--mode", "json", "--print", text}
 		cmd := exec.CommandContext(ctx, "pi", args...)
 		cmd.Dir = cwd
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -74,14 +72,12 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 			}
 		}()
 
-		var output string
+		state := &jsonStreamState{}
 		stdoutDone := make(chan struct{})
 		go streamPipe(stdout, func(line string) {
-			if output != "" {
-				output += "\n"
+			if !handlePiJSONEvent(line, broker, store, sessionID, state) {
+				broker.Publish(sessionID, "tool.output", map[string]string{"tool": "pi", "chunk": line})
 			}
-			output += line
-			broker.Publish(sessionID, "tool.output", map[string]string{"tool": "pi", "chunk": line})
 		}, stdoutDone)
 		go streamPipe(stderr, func(line string) {
 			broker.Publish(sessionID, "tool.output", map[string]string{"tool": "pi", "chunk": line})
@@ -89,17 +85,10 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 
 		<-stdoutDone
 		err = cmd.Wait()
-		stopTail()
-		waitForTail(tailDone)
 		if err != nil {
 			broker.Publish(sessionID, "error", map[string]string{"error": err.Error()})
 			broker.Publish(sessionID, "session.status", map[string]string{"status": "idle"})
 			return
-		}
-		if emitted.Load() == 0 && output != "" {
-			msg := Message{Kind: "pi", Text: output}
-			_ = store.AppendMessage(sessionID, msg)
-			broker.Publish(sessionID, "session.message", msg)
 		}
 		broker.Publish(sessionID, "session.status", map[string]string{"status": "idle", "finishedAt": time.Now().UTC().Format(time.RFC3339)})
 	}()
@@ -115,6 +104,91 @@ func (r *Runner) Cancel(sessionID string) bool {
 		delete(r.running, sessionID)
 	}
 	return ok
+}
+
+type jsonStreamState struct {
+	streamedText     bool
+	streamedThinking bool
+}
+
+func handlePiJSONEvent(line string, broker *Broker, store *Store, sessionID string, state *jsonStreamState) bool {
+	var event struct {
+		Type                  string          `json:"type"`
+		Message               json.RawMessage `json:"message"`
+		ToolName              string          `json:"toolName"`
+		Args                  json.RawMessage `json:"args"`
+		PartialResult         json.RawMessage `json:"partialResult"`
+		Result                json.RawMessage `json:"result"`
+		IsError               bool            `json:"isError"`
+		AssistantMessageEvent struct {
+			Type  string `json:"type"`
+			Delta string `json:"delta"`
+			Text  string `json:"text"`
+		} `json:"assistantMessageEvent"`
+	}
+	if err := json.Unmarshal([]byte(line), &event); err != nil || event.Type == "" {
+		return false
+	}
+	switch event.Type {
+	case "session", "agent_start", "turn_start", "queue_update":
+		return true
+	case "message_update":
+		delta := event.AssistantMessageEvent.Delta
+		if delta == "" {
+			delta = event.AssistantMessageEvent.Text
+		}
+		if delta == "" {
+			return true
+		}
+		switch event.AssistantMessageEvent.Type {
+		case "thinking_delta", "reasoning_delta":
+			state.streamedThinking = true
+			broker.Publish(sessionID, "session.delta", map[string]string{"kind": "think", "delta": delta})
+		default:
+			state.streamedText = true
+			broker.Publish(sessionID, "session.delta", map[string]string{"kind": "pi", "delta": delta})
+		}
+		return true
+	case "message_end":
+		for _, msg := range convertAgentMessages(event.Message) {
+			_ = store.AppendMessage(sessionID, msg)
+			if (msg.Kind == "pi" && state.streamedText) || (msg.Kind == "think" && state.streamedThinking) {
+				continue
+			}
+			broker.Publish(sessionID, eventTypeForMessage(msg), msg)
+		}
+		return true
+	case "tool_execution_start":
+		broker.Publish(sessionID, "tool.started", Message{Kind: "tool", Tool: event.ToolName, Args: string(event.Args), Status: "running", CollapsedByDefault: true})
+		return true
+	case "tool_execution_update":
+		broker.Publish(sessionID, "tool.output", map[string]string{"tool": event.ToolName, "chunk": jsonChunk(event.PartialResult)})
+		return true
+	case "tool_execution_end":
+		status := "ok"
+		if event.IsError {
+			status = "err"
+		}
+		msg := Message{Kind: "tool", Tool: event.ToolName, Args: string(event.Args), Status: status, Body: jsonChunk(event.Result), CollapsedByDefault: true}
+		_ = store.AppendMessage(sessionID, msg)
+		broker.Publish(sessionID, "tool.finished", msg)
+		return true
+	case "agent_end", "turn_end":
+		return true
+	default:
+		return true
+	}
+}
+
+func jsonChunk(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	return fmt.Sprintf("%s", raw)
 }
 
 func eventTypeForMessage(msg Message) string {

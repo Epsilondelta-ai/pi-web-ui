@@ -127,6 +127,10 @@ class PiApp extends HTMLElement {
       this.appendMessage(event.payload);
       return;
     }
+    if (event.type === "session.delta") {
+      this.appendDelta(event.payload);
+      return;
+    }
     if (event.type === "session.renamed") {
       this.updateSessionTitle(event.payload);
       return;
@@ -239,6 +243,7 @@ class PiApp extends HTMLElement {
     if (!this.termInner || !msg) return;
     if (this.isDuplicateMessage(msg)) return;
     if (msg.kind !== "user") this.removeLoadingMessage();
+    this.termInner.querySelector(`.msg.streaming[data-kind='${msg.kind}']`)?.remove();
     this.termInner.append(this.messageNode(msg));
     this.scrollTerm();
   }
@@ -248,6 +253,22 @@ class PiApp extends HTMLElement {
     const messages = [...this.termInner.querySelectorAll(".msg:not(.loading)")];
     const last = messages.at(-1);
     return last?.dataset.kind === msg.kind && last.querySelector(".body")?.textContent === msg.text;
+  }
+
+  appendDelta(payload) {
+    if (!this.termInner || !payload?.delta) return;
+    this.removeLoadingMessage();
+    const kind = payload.kind === "think" ? "think" : "pi";
+    let row = this.termInner.querySelector(`.msg.streaming[data-kind='${kind}']`);
+    if (!row) {
+      row = this.simpleMessage(`${kind} streaming`, kind === "think" ? "…" : "pi >", "");
+      row.classList.add("streaming");
+      row.dataset.kind = kind;
+      this.termInner.append(row);
+    }
+    const body = row.querySelector(".body");
+    if (body) body.textContent += payload.delta;
+    this.scrollTerm();
   }
 
   appendLoadingMessage() {

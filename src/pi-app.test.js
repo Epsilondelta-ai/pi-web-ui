@@ -57,6 +57,18 @@ describe("pi-app runtime", () => {
     expect(app.querySelector(".msg.loading")).toBeNull();
   });
 
+  it("streams assistant deltas before the final message", async () => {
+    const app = document.querySelector("pi-app");
+    await customElements.whenDefined("pi-app");
+    app.connectedCallback();
+    app.renderMessages([]);
+    app.appendLoadingMessage();
+    app.appendDelta({ kind: "pi", delta: "hel" });
+    app.appendDelta({ kind: "pi", delta: "lo" });
+    expect(app.querySelector(".msg.loading")).toBeNull();
+    expect(app.querySelector(".msg.streaming .body").textContent).toBe("hello");
+  });
+
   it("switches between picker and workspace routes", async () => {
     const app = document.querySelector("pi-app");
     await customElements.whenDefined("pi-app");
