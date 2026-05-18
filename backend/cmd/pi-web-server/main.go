@@ -20,7 +20,11 @@ func main() {
 	mock := flag.Bool("mock", false, "mock prompt streaming instead of executing the local pi CLI")
 	flag.Parse()
 
-	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: !*mock}, piweb.NewAutoStore(), piweb.NewBroker())
+	store := piweb.NewAutoStore()
+	if *mock {
+		store = piweb.NewMockStore()
+	}
+	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: !*mock}, store, piweb.NewBroker())
 	httpServer := &http.Server{Addr: server.Addr(), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second}
 
 	go func() {

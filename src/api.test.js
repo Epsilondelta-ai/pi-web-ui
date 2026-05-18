@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession, getSession, getWorkspaces, postPrompt, sessionEvents } from "./api.js";
+import { cancelSession, createSession, deleteSession, deleteWorkspace, getSession, getWorkspaceFile, getWorkspaces, postPrompt, renameSession, sessionEvents } from "./api.js";
 
 describe("api adapter", () => {
   beforeEach(() => {
@@ -31,6 +31,20 @@ describe("api adapter", () => {
     const result = await createSession("w1");
     expect(result.url).toBe("http://backend.test/api/workspaces/w1/sessions");
     expect(result.options.method).toBe("POST");
+  });
+
+  it("supports workspace and session management", async () => {
+    expect((await deleteWorkspace("w1")).options.method).toBe("DELETE");
+    expect((await deleteSession("s1")).options.method).toBe("DELETE");
+    expect((await cancelSession("s1")).options.method).toBe("POST");
+    const renamed = await renameSession("s1", "next");
+    expect(renamed.options.method).toBe("PATCH");
+    expect(JSON.parse(renamed.options.body)).toEqual({ title: "next" });
+  });
+
+  it("reads workspace files", async () => {
+    const result = await getWorkspaceFile("w1", "src/main.go");
+    expect(result.url).toBe("http://backend.test/api/workspaces/w1/files/read?path=src%2Fmain.go");
   });
 
   it("posts prompts as json", async () => {

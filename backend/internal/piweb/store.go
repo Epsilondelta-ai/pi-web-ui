@@ -1,11 +1,14 @@
 package piweb
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Store struct {
@@ -20,10 +23,10 @@ type Store struct {
 
 func NewAutoStore() *Store {
 	store, err := NewPiStore(DefaultPiSessionDir())
-	if err == nil && len(store.workspaces) > 0 {
+	if err == nil {
 		return store
 	}
-	return NewMockStore()
+	return &Store{workspaces: []Workspace{}, files: map[string][]FileNode{}, conversations: map[string][]Message{}, workspacePath: map[string]string{}, sessionFiles: map[string]string{}, sessionCWD: map[string]string{}}
 }
 
 func NewPiStore(sessionDir string) (*Store, error) {
@@ -142,6 +145,20 @@ func (s *Store) CreateSession(workspaceID string) (Session, error) {
 	return Session{}, ErrNotFound
 }
 
+func (s *Store) DeleteWorkspace(workspaceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, workspace := range s.workspaces {
+		if workspace.ID == workspaceID {
+			s.workspaces = append(s.workspaces[:i], s.workspaces[i+1:]...)
+			delete(s.workspacePath, workspaceID)
+			delete(s.files, workspaceID)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
 func (s *Store) Sessions(workspaceID string) ([]Session, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -166,6 +183,66 @@ func (s *Store) Session(sessionID string) (Session, []Message, error) {
 	return Session{}, nil, ErrNotFound
 }
 
+func (s *Store) RenameSession(sessionID, title string) (Session, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return Session{}, errors.New("title is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for wi := range s.workspaces {
+		for si := range s.workspaces[wi].Sessions {
+			if s.workspaces[wi].Sessions[si].ID == sessionID {
+				s.workspaces[wi].Sessions[si].Title = title
+				if err := appendSessionInfo(s.sessionFiles[sessionID], title); err != nil {
+					return Session{}, err
+				}
+				return s.workspaces[wi].Sessions[si], nil
+			}
+		}
+	}
+	return Session{}, ErrNotFound
+}
+
+func (s *Store) DeleteSession(sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for wi := range s.workspaces {
+		for si := range s.workspaces[wi].Sessions {
+			if s.workspaces[wi].Sessions[si].ID == sessionID {
+				s.workspaces[wi].Sessions = append(s.workspaces[wi].Sessions[:si], s.workspaces[wi].Sessions[si+1:]...)
+				s.workspaces[wi].SessionCount = len(s.workspaces[wi].Sessions)
+				if file := s.sessionFiles[sessionID]; file != "" {
+					_ = os.Remove(file)
+				}
+				delete(s.conversations, sessionID)
+				delete(s.sessionFiles, sessionID)
+				delete(s.sessionCWD, sessionID)
+				return nil
+			}
+		}
+	}
+	return ErrNotFound
+}
+
+func appendSessionInfo(path, title string) error {
+	if path == "" {
+		return nil
+	}
+	entry := map[string]any{"type": "session_info", "id": createSessionID(), "parentId": nil, "timestamp": time.Now().UTC().Format(time.RFC3339Nano), "name": title}
+	line, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.Write(append(line, '\n'))
+	return err
+}
+
 func (s *Store) Files(workspaceID string) ([]FileNode, error) {
 	s.mu.RLock()
 	root := s.workspacePath[workspaceID]
@@ -181,6 +258,16 @@ func (s *Store) Files(workspaceID string) ([]FileNode, error) {
 		return nil, ErrNotFound
 	}
 	return mock, nil
+}
+
+func (s *Store) ReadFile(workspaceID, rel string) (FileContent, error) {
+	s.mu.RLock()
+	root := s.workspacePath[workspaceID]
+	s.mu.RUnlock()
+	if root == "" {
+		return FileContent{}, ErrNotFound
+	}
+	return ReadWorkspaceFile(root, rel, 256*1024)
 }
 
 func (s *Store) GitStatus(workspaceID string) (GitStatus, error) {

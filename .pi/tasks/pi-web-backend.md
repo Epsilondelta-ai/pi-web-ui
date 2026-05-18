@@ -113,19 +113,19 @@ data: {"sessionId":"...","payload":{}}
 
 ### 7. Completion backlog
 
-- [ ] Remove real-mode backend fallback to mock workspaces.
-- [ ] Add workspace remove/hide endpoint and frontend action.
-- [ ] Add session delete endpoint and frontend action.
-- [ ] Add session rename endpoint and frontend action.
-- [ ] Wire frontend cancel/stop button to backend cancel endpoint.
-- [ ] Implement prompt attachments by sending readable file context to backend.
-- [ ] Add safe file read endpoint and frontend file-tree open action.
-- [ ] Add SSE event replay with `Last-Event-ID`.
-- [ ] Redact obvious secrets before SSE emission.
-- [ ] Normalize tailed pi JSONL tool entries into tool SSE events.
-- [ ] Harden process cancellation with process groups where supported.
-- [ ] Refresh workspace/session metadata after create/delete/rename/prompt completion.
-- [ ] Keep `/share` and command palette intentionally absent.
+- [x] Remove real-mode backend fallback to mock workspaces.
+- [x] Add workspace remove/hide endpoint and frontend action.
+- [x] Add session delete endpoint and frontend action.
+- [x] Add session rename endpoint and frontend action.
+- [x] Wire frontend cancel/stop button to backend cancel endpoint.
+- [x] Implement prompt attachments by sending readable file context to backend.
+- [x] Add safe file read endpoint and frontend file-tree open action.
+- [x] Add SSE event replay with `Last-Event-ID`.
+- [x] Redact obvious secrets before SSE emission.
+- [x] Normalize tailed pi JSONL tool entries into tool SSE events.
+- [x] Harden process cancellation with process groups where supported.
+- [x] Refresh workspace/session metadata after create/delete/rename/prompt completion.
+- [x] Keep `/share` and command palette intentionally absent.
 
 ### 8. Local safety
 

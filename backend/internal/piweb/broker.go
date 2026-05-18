@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,10 +18,12 @@ type Broker struct {
 	nextID      atomic.Uint64
 	buffer      int
 	heartbeat   time.Duration
+	history     map[string][]Event
+	historySize int
 }
 
 func NewBroker() *Broker {
-	return &Broker{subscribers: map[string]map[chan Event]struct{}{}, buffer: 32, heartbeat: 15 * time.Second}
+	return &Broker{subscribers: map[string]map[chan Event]struct{}{}, history: map[string][]Event{}, buffer: 32, heartbeat: 15 * time.Second, historySize: 256}
 }
 
 func (b *Broker) Subscribe(sessionID string) (<-chan Event, func()) {
@@ -49,16 +52,36 @@ func (b *Broker) Subscribe(sessionID string) (<-chan Event, func()) {
 }
 
 func (b *Broker) Publish(sessionID, eventType string, payload any) Event {
-	event := Event{ID: b.nextID.Add(1), Type: eventType, SessionID: sessionID, Payload: payload, At: time.Now().UTC()}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	event := Event{ID: b.nextID.Add(1), Type: eventType, SessionID: sessionID, Payload: RedactPayload(payload), At: time.Now().UTC()}
+	b.mu.Lock()
+	b.history[sessionID] = append(b.history[sessionID], event)
+	if len(b.history[sessionID]) > b.historySize {
+		b.history[sessionID] = b.history[sessionID][len(b.history[sessionID])-b.historySize:]
+	}
+	var subscribers []chan Event
 	for ch := range b.subscribers[sessionID] {
+		subscribers = append(subscribers, ch)
+	}
+	b.mu.Unlock()
+	for _, ch := range subscribers {
 		select {
 		case ch <- event:
 		default:
 		}
 	}
 	return event
+}
+
+func (b *Broker) Replay(sessionID string, after uint64) []Event {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	var replay []Event
+	for _, event := range b.history[sessionID] {
+		if event.ID > after {
+			replay = append(replay, event)
+		}
+	}
+	return replay
 }
 
 func (b *Broker) ServeSession(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -71,6 +94,17 @@ func (b *Broker) ServeSession(w http.ResponseWriter, r *http.Request, sessionID 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	flusher.Flush()
+
+	var after uint64
+	if value := r.Header.Get("Last-Event-ID"); value != "" {
+		after, _ = strconv.ParseUint(value, 10, 64)
+	}
+	for _, event := range b.Replay(sessionID, after) {
+		if err := WriteSSE(w, event); err != nil {
+			return
+		}
+	}
 	flusher.Flush()
 
 	events, unsubscribe := b.Subscribe(sessionID)

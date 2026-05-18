@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestReadWorkspaceFileRejectsTraversal(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	content, err := ReadWorkspaceFile(root, "note.txt", 1024)
+	if err != nil || content.Content != "hello" {
+		t.Fatalf("unexpected content: %#v %v", content, err)
+	}
+	if _, err := ReadWorkspaceFile(root, "../secret", 1024); err == nil {
+		t.Fatal("expected traversal to fail")
+	}
+}
+
 func TestRealFileTree(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "src"), 0o700); err != nil {

@@ -46,8 +46,16 @@ export function createSession(workspaceId) {
   return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/sessions`, { method: "POST" });
 }
 
+export function deleteWorkspace(workspaceId) {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceId)}`, { method: "DELETE" });
+}
+
 export function getWorkspaceFiles(workspaceId) {
   return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/files`);
+}
+
+export function getWorkspaceFile(workspaceId, path) {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/files/read?path=${encodeURIComponent(path)}`);
 }
 
 export function getGitStatus(workspaceId) {
@@ -56,6 +64,21 @@ export function getGitStatus(workspaceId) {
 
 export function getSession(sessionId) {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function renameSession(sessionId, title) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
+export function deleteSession(sessionId) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+}
+
+export function cancelSession(sessionId) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: "POST" });
 }
 
 export function postPrompt(sessionId, text, attachments = []) {

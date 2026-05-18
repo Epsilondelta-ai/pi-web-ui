@@ -20,6 +20,19 @@ func TestWriteSSE(t *testing.T) {
 	}
 }
 
+func TestBrokerReplayAndRedaction(t *testing.T) {
+	broker := NewBroker()
+	event := broker.Publish("s1", "tool.output", map[string]string{"chunk": "api_key=secret-value"})
+	replay := broker.Replay("s1", event.ID-1)
+	if len(replay) != 1 {
+		t.Fatalf("expected replay event: %#v", replay)
+	}
+	payload := replay[0].Payload.(map[string]string)
+	if strings.Contains(payload["chunk"], "secret-value") || !strings.Contains(payload["chunk"], "[REDACTED]") {
+		t.Fatalf("secret was not redacted: %#v", payload)
+	}
+}
+
 func TestBrokerFanoutAndUnsubscribe(t *testing.T) {
 	broker := NewBroker()
 	ch, unsubscribe := broker.Subscribe("s1")

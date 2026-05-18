@@ -3,6 +3,7 @@ package piweb
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +21,42 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), `"ok":true`) {
 		t.Fatalf("unexpected body: %s", res.Body.String())
+	}
+}
+
+func TestWorkspaceAndSessionManagementEndpoints(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_SESSION_DIR", t.TempDir())
+	store := NewMockStore()
+	workspace, err := store.OpenWorkspace(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(Config{}, store, NewBroker())
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/workspaces/"+workspace.ID+"/sessions", nil)
+	createRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRes, createReq)
+	if createRes.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", createRes.Code, createRes.Body.String())
+	}
+
+	var body struct {
+		Session Session `json:"session"`
+	}
+	if err := json.NewDecoder(createRes.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	renameReq := httptest.NewRequest(http.MethodPatch, "/api/sessions/"+body.Session.ID, bytes.NewBufferString(`{"title":"renamed"}`))
+	renameRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(renameRes, renameReq)
+	if renameRes.Code != http.StatusOK || !strings.Contains(renameRes.Body.String(), "renamed") {
+		t.Fatalf("rename failed: %d %s", renameRes.Code, renameRes.Body.String())
+	}
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/sessions/"+body.Session.ID, nil)
+	deleteRes := httptest.NewRecorder()
+	server.Handler().ServeHTTP(deleteRes, deleteReq)
+	if deleteRes.Code != http.StatusOK {
+		t.Fatalf("delete failed: %d %s", deleteRes.Code, deleteRes.Body.String())
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -52,11 +53,15 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/health", s.health)
 	s.mux.HandleFunc("GET /api/workspaces", s.workspaces)
 	s.mux.HandleFunc("POST /api/workspaces/open", s.openWorkspace)
+	s.mux.HandleFunc("DELETE /api/workspaces/{workspaceID}", s.deleteWorkspace)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/sessions", s.workspaceSessions)
 	s.mux.HandleFunc("POST /api/workspaces/{workspaceID}/sessions", s.createSession)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/files", s.workspaceFiles)
+	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/files/read", s.readWorkspaceFile)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/git/status", s.gitStatus)
 	s.mux.HandleFunc("GET /api/sessions/{sessionID}", s.session)
+	s.mux.HandleFunc("PATCH /api/sessions/{sessionID}", s.renameSession)
+	s.mux.HandleFunc("DELETE /api/sessions/{sessionID}", s.deleteSession)
 	s.mux.HandleFunc("POST /api/sessions/{sessionID}/prompt", s.prompt)
 	s.mux.HandleFunc("POST /api/sessions/{sessionID}/cancel", s.cancelSession)
 	s.mux.HandleFunc("GET /api/sessions/{sessionID}/events", s.sessionEvents)
@@ -82,6 +87,14 @@ func (s *Server) openWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, workspace)
+}
+
+func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.DeleteWorkspace(r.PathValue("workspaceID")); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +124,15 @@ func (s *Server) workspaceFiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
+func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
+	file, err := s.store.ReadFile(r.PathValue("workspaceID"), r.URL.Query().Get("path"))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, file)
+}
+
 func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := s.store.GitStatus(r.PathValue("workspaceID"))
 	if err != nil {
@@ -129,6 +151,28 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"session": session, "messages": messages})
 }
 
+func (s *Server) renameSession(w http.ResponseWriter, r *http.Request) {
+	var req RenameSessionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	session, err := s.store.RenameSession(r.PathValue("sessionID"), req.Title)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.DeleteSession(r.PathValue("sessionID")); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
 func (s *Server) prompt(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.PathValue("sessionID")
 	if _, _, err := s.store.Session(sessionID); err != nil {
@@ -140,17 +184,18 @@ func (s *Server) prompt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if strings.TrimSpace(req.Text) == "" {
+	text := mergePromptAttachments(req.Text, req.Attachments)
+	if strings.TrimSpace(text) == "" {
 		writeError(w, http.StatusBadRequest, errors.New("text is required"))
 		return
 	}
 	if s.config.EnablePiExecution {
-		if err := s.runner.StartPiPrompt(s.context(), s.broker, s.store, sessionID, req.Text); err != nil {
+		if err := s.runner.StartPiPrompt(s.context(), s.broker, s.store, sessionID, text); err != nil {
 			writeError(w, http.StatusConflict, err)
 			return
 		}
 	} else {
-		go s.broker.PublishMockPrompt(s.context(), s.store, sessionID, req.Text)
+		go s.broker.PublishMockPrompt(s.context(), s.store, sessionID, text)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true, "realPi": s.config.EnablePiExecution})
 }
@@ -172,6 +217,25 @@ func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
 	s.broker.ServeSession(w, r, sessionID)
 }
 
+func mergePromptAttachments(text string, attachments []string) string {
+	if len(attachments) == 0 {
+		return text
+	}
+	var b strings.Builder
+	b.WriteString(text)
+	for i, attachment := range attachments {
+		if strings.TrimSpace(attachment) == "" {
+			continue
+		}
+		b.WriteString("\n\n<attachment index=\"")
+		b.WriteString(strconv.Itoa(i + 1))
+		b.WriteString("\">\n")
+		b.WriteString(attachment)
+		b.WriteString("\n</attachment>")
+	}
+	return b.String()
+}
+
 func (s *Server) context() context.Context {
 	return context.Background()
 }
@@ -183,7 +247,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

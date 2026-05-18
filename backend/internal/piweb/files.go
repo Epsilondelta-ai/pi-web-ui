@@ -1,6 +1,7 @@
 package piweb
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,24 +15,25 @@ func RealFileTree(root string, maxDepth int) ([]FileNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fileNodes(root, entries, 0, maxDepth), nil
+	return fileNodes(root, root, entries, 0, maxDepth), nil
 }
 
-func fileNodes(parent string, entries []os.DirEntry, depth, maxDepth int) []FileNode {
+func fileNodes(root, parent string, entries []os.DirEntry, depth, maxDepth int) []FileNode {
 	var nodes []FileNode
 	for _, entry := range entries {
 		name := entry.Name()
 		if shouldSkipFile(name) {
 			continue
 		}
-		node := FileNode{Name: name, Depth: depth}
 		path := filepath.Join(parent, name)
+		rel, _ := filepath.Rel(root, path)
+		node := FileNode{Name: name, Path: filepath.ToSlash(rel), Depth: depth}
 		if entry.IsDir() {
 			node.Type = "dir"
 			node.Open = depth == 0
 			if depth < maxDepth {
 				if children, err := os.ReadDir(path); err == nil {
-					node.Children = fileNodes(path, children, depth+1, maxDepth)
+					node.Children = fileNodes(root, path, children, depth+1, maxDepth)
 				}
 			}
 		} else {
@@ -47,6 +49,50 @@ func shouldSkipFile(name string) bool {
 		return true
 	}
 	return false
+}
+
+func ReadWorkspaceFile(root, rel string, maxBytes int64) (FileContent, error) {
+	full, err := SafeJoin(root, rel)
+	if err != nil {
+		return FileContent{}, err
+	}
+	info, err := os.Stat(full)
+	if err != nil {
+		return FileContent{}, err
+	}
+	if info.IsDir() {
+		return FileContent{}, errors.New("path is a directory")
+	}
+	file, err := os.Open(full)
+	if err != nil {
+		return FileContent{}, err
+	}
+	defer file.Close()
+	limit := maxBytes
+	if limit <= 0 {
+		limit = 256 * 1024
+	}
+	buf := make([]byte, limit+1)
+	n, _ := file.Read(buf)
+	truncated := int64(n) > limit
+	if truncated {
+		n = int(limit)
+	}
+	return FileContent{Path: filepath.ToSlash(filepath.Clean(rel)), Content: string(buf[:n]), Truncated: truncated}, nil
+}
+
+func SafeJoin(root, rel string) (string, error) {
+	root = filepath.Clean(root)
+	cleanRel := filepath.Clean(strings.TrimPrefix(rel, "/"))
+	if cleanRel == "." || cleanRel == "" {
+		return "", errors.New("path is required")
+	}
+	full := filepath.Join(root, cleanRel)
+	relBack, err := filepath.Rel(root, full)
+	if err != nil || strings.HasPrefix(relBack, "..") || filepath.IsAbs(relBack) {
+		return "", errors.New("path traversal is not allowed")
+	}
+	return full, nil
 }
 
 func RealGitStatus(root string) (GitStatus, error) {

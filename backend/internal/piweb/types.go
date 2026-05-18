@@ -24,6 +24,7 @@ type Session struct {
 type FileNode struct {
 	Type     string     `json:"type"`
 	Name     string     `json:"name"`
+	Path     string     `json:"path,omitempty"`
 	Depth    int        `json:"depth"`
 	Open     bool       `json:"open,omitempty"`
 	Status   string     `json:"status,omitempty"`
@@ -64,6 +65,16 @@ type PromptRequest struct {
 
 type OpenWorkspaceRequest struct {
 	Path string `json:"path"`
+}
+
+type RenameSessionRequest struct {
+	Title string `json:"title"`
+}
+
+type FileContent struct {
+	Path      string `json:"path"`
+	Content   string `json:"content"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 type ErrorResponse struct {

@@ -1,4 +1,4 @@
-import { createSession, getGitStatus, getSession, getWorkspaceFiles, getWorkspaces, openWorkspace, postPrompt, sessionEvents } from "./api.js";
+import { cancelSession, createSession, deleteSession as deleteSessionRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceFile, getWorkspaceFiles, getWorkspaces, openWorkspace, postPrompt, renameSession as renameSessionRequest, sessionEvents } from "./api.js";
 import { escapeHtml, renderAnsiBody, renderBannerBody, renderPiBody, renderTree } from "./renderers.js";
 
 class PiApp extends HTMLElement {
@@ -14,6 +14,8 @@ class PiApp extends HTMLElement {
     this.termInner = this.querySelector(".term-inner");
     this.eventSource = null;
     this.apiConnected = false;
+    this.running = false;
+    this.attachmentContents = [];
     this.bind();
     this.restoreSidebar();
     this.updatePrompt();
@@ -28,6 +30,7 @@ class PiApp extends HTMLElement {
   bind() {
     this.addEventListener("click", (event) => this.click(event));
     this.querySelector("[data-path-form]")?.addEventListener("submit", (event) => this.submitWorkspacePath(event));
+    this.send?.addEventListener("click", () => this.running ? this.cancelActiveSession() : this.submitPrompt());
     this.prompt?.addEventListener("input", () => this.updatePrompt());
     this.prompt?.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") this.submitPrompt();
@@ -141,11 +144,17 @@ class PiApp extends HTMLElement {
   }
 
   setMode(mode) {
+    this.running = ["running", "thinking"].includes(mode);
     this.querySelectorAll(".context-strip .chip").forEach((chip) => {
       if (chip.querySelector(".lbl")?.textContent === "mode") chip.querySelector(".val").textContent = mode;
     });
     const promptMode = this.querySelector(".prompt-meta .dim:nth-of-type(2)");
     if (promptMode) promptMode.textContent = mode;
+    if (this.send) {
+      this.send.textContent = this.running ? "stop" : "send";
+      if (this.running) this.send.disabled = false;
+      else this.updatePrompt();
+    }
   }
 
   renderWorkspaces(workspaces) {
@@ -187,7 +196,7 @@ class PiApp extends HTMLElement {
     group.className = "workspace-group";
     group.dataset.workspaceGroup = workspace.id;
     const open = workspace.id === this.dataset.activeWorkspaceId;
-    group.innerHTML = `<button type="button" class="ws-row ${open ? "open" : ""}" data-action="toggle-workspace" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="${open}"><span class="caret">${open ? "▾" : "▸"}</span><span class="ws-stack"><span class="ws-name"><span class="dot"></span><span class="label"></span></span><span class="ws-path"></span></span><span class="ws-meta">${workspace.sessionCount}</span></button><div class="sessions"${open ? "" : " hidden"}><button type="button" class="session-row new-session-row" data-action="new-session" data-workspace="${escapeHtml(workspace.id)}"><span class="gutter">+</span><span class="title">new session</span><span class="meta">N</span></button></div>`;
+    group.innerHTML = `<div class="workspace-shell"><button type="button" class="ws-row ${open ? "open" : ""}" data-action="toggle-workspace" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="${open}"><span class="caret">${open ? "▾" : "▸"}</span><span class="ws-stack"><span class="ws-name"><span class="dot"></span><span class="label"></span></span><span class="ws-path"></span></span><span class="ws-meta">${workspace.sessionCount}</span></button><button type="button" class="row-action danger" data-action="delete-workspace" data-workspace="${escapeHtml(workspace.id)}" title="remove workspace">×</button></div><div class="sessions"${open ? "" : " hidden"}><button type="button" class="session-row new-session-row" data-action="new-session" data-workspace="${escapeHtml(workspace.id)}"><span class="gutter">+</span><span class="title">new session</span><span class="meta">N</span></button></div>`;
     group.querySelector(".label").textContent = workspace.name;
     group.querySelector(".ws-path").textContent = workspace.path;
     group.querySelector(".dot").classList.toggle("live", !!workspace.live);
@@ -203,7 +212,7 @@ class PiApp extends HTMLElement {
     row.dataset.session = session.id;
     row.dataset.workspace = workspaceId;
     row.dataset.title = session.title;
-    row.innerHTML = `<span class="gutter"></span><span class="title"></span><span class="meta"></span>`;
+    row.innerHTML = `<span class="gutter"></span><span class="title"></span><span class="meta"></span><span class="session-actions"><span class="row-action" data-action="rename-session" title="rename">rename</span><span class="row-action danger" data-action="delete-session" title="delete">×</span></span>`;
     row.querySelector(".title").append(document.createTextNode(session.title));
     const sid = document.createElement("span");
     sid.className = "sid";
@@ -317,9 +326,9 @@ class PiApp extends HTMLElement {
     const text = this.prompt?.value.trim() || "";
     if (!text && !this.attachments?.children.length) return;
     const sessionId = this.dataset.activeSessionId;
-    if (this.apiConnected && sessionId && text) {
+    if (this.apiConnected && sessionId) {
       try {
-        await postPrompt(sessionId, text);
+        await postPrompt(sessionId, text, this.attachmentContents.filter(Boolean));
       } catch {
         this.setConnection("err");
       }
@@ -327,38 +336,70 @@ class PiApp extends HTMLElement {
       this.appendMessage({ kind: "user", text });
     }
     if (this.prompt) this.prompt.value = "";
+    this.attachmentContents = [];
     this.attachments?.replaceChildren();
     if (this.attachments) this.attachments.hidden = true;
     this.updatePrompt();
   }
 
+  async cancelActiveSession() {
+    const sessionId = this.dataset.activeSessionId;
+    if (!sessionId || !this.apiConnected) return;
+    try {
+      await cancelSession(sessionId);
+      this.setMode("cancelled");
+    } catch {
+      this.setConnection("err");
+    }
+  }
+
   click(event) {
     const remove = event.target.closest("[data-remove-attachment]");
     if (remove) {
-      remove.closest(".attach-chip")?.remove();
+      const chip = remove.closest(".attach-chip");
+      const index = Number(chip?.dataset.attachmentIndex);
+      if (Number.isInteger(index)) this.attachmentContents[index] = "";
+      chip?.remove();
       this.updatePrompt();
       return;
     }
+    const actionTarget = event.target.closest("[data-action]");
     const button = event.target.closest("button");
-    if (!button || !this.contains(button)) return;
-    const action = button.dataset.action;
+    if ((!button && !actionTarget) || !this.contains(button || actionTarget)) return;
+    const action = actionTarget?.dataset.action || button?.dataset.action;
     if (action === "route-picker") this.route("picker");
     if (action === "route-workspace") this.route("workspace");
     if (action === "toggle-tree") this.toggleTree();
     if (action === "toggle-tree-node") this.toggleTreeNode(button);
+    if (action === "open-file") this.openFile(button);
     if (action === "collapse-sidebar") this.collapseSidebar(true);
     if (action === "expand-sidebar") this.collapseSidebar(false);
     if (action === "open-drawer") this.querySelector(".app-body")?.classList.add("drawer-open");
     if (action === "close-drawer") this.querySelector(".app-body")?.classList.remove("drawer-open");
     if (action === "toggle-tool") this.toggleTool(button);
     if (action === "toggle-workspace") this.toggleWorkspace(button.dataset.workspace);
+    if (action === "delete-workspace") this.deleteWorkspace(actionTarget.dataset.workspace);
     if (action === "new-session") this.newSession(button.dataset.workspace);
+    if (action === "rename-session") this.renameSession(actionTarget.closest(".session-row")?.dataset.session);
+    if (action === "delete-session") this.deleteSession(actionTarget.closest(".session-row")?.dataset.session);
     if (action === "close-tweaks") this.querySelector("[data-tweaks]")?.setAttribute("hidden", "");
-    if (button.dataset.session) this.pickSession(button);
-    if (button.dataset.workspace && button.classList.contains("recent-row")) this.openWorkspace(button.dataset.workspace);
-    if (button.dataset.seed) this.seed(button.dataset.seed);
-    if (button.dataset.skill) this.seed(`/skill ${button.dataset.skill}\n\n`);
-    if (button.dataset.slash) this.pickSlash(button.dataset.slash);
+    if (!actionTarget?.classList.contains("row-action") && button?.dataset.session) this.pickSession(button);
+    if (button?.dataset.workspace && button.classList.contains("recent-row")) this.openWorkspace(button.dataset.workspace);
+    if (button?.dataset.seed) this.seed(button.dataset.seed);
+    if (button?.dataset.skill) this.seed(`/skill ${button.dataset.skill}\n\n`);
+    if (button?.dataset.slash) this.pickSlash(button.dataset.slash);
+  }
+
+  async deleteWorkspace(workspaceId) {
+    if (!workspaceId || !this.apiConnected) return;
+    if (!confirm(`Remove workspace ${workspaceId} from this view?`)) return;
+    try {
+      await deleteWorkspaceRequest(workspaceId);
+      const { workspaces } = await getWorkspaces();
+      this.renderWorkspaces(workspaces || []);
+    } catch {
+      this.setConnection("err");
+    }
   }
 
   async openWorkspace(workspaceId) {
@@ -460,6 +501,19 @@ class PiApp extends HTMLElement {
     });
   }
 
+  async openFile(button) {
+    const path = button?.dataset.filePath;
+    const workspaceId = this.dataset.activeWorkspaceId;
+    if (!path || !workspaceId || !this.apiConnected) return;
+    try {
+      const file = await getWorkspaceFile(workspaceId, path);
+      this.attachmentContents.push(`File: ${file.path}\n\n${file.content}${file.truncated ? "\n\n[truncated]" : ""}`);
+      this.addAttachmentChip(file.path, file.content.length);
+    } catch {
+      this.setConnection("err");
+    }
+  }
+
   async pickSession(button) {
     this.querySelectorAll(".session-row.active").forEach((row) => row.classList.remove("active"));
     button.classList.add("active");
@@ -474,6 +528,41 @@ class PiApp extends HTMLElement {
     if (this.apiConnected) await this.loadSession(button.dataset.session);
     else this.dataset.activeSessionId = button.dataset.session;
     this.scrollTerm();
+  }
+
+  async renameSession(sessionId) {
+    if (!sessionId || !this.apiConnected) return;
+    const current = this.querySelector(`[data-session='${sessionId}']`)?.dataset.title || "";
+    const title = prompt("Rename session", current)?.trim();
+    if (!title) return;
+    try {
+      const { session } = await renameSessionRequest(sessionId, title);
+      const row = this.querySelector(`[data-session='${sessionId}']`);
+      if (row) {
+        row.dataset.title = session.title;
+        row.querySelector(".title")?.replaceChildren(document.createTextNode(session.title), Object.assign(document.createElement("span"), { className: "sid", textContent: session.id }));
+      }
+      const activeTitle = this.querySelector("[data-active-session-title]");
+      if (activeTitle && this.dataset.activeSessionId === sessionId) activeTitle.textContent = session.title;
+    } catch {
+      this.setConnection("err");
+    }
+  }
+
+  async deleteSession(sessionId) {
+    if (!sessionId || !this.apiConnected) return;
+    if (!confirm(`Delete session ${sessionId}? This removes the local JSONL file.`)) return;
+    try {
+      await deleteSessionRequest(sessionId);
+      this.querySelector(`[data-session='${sessionId}']`)?.remove();
+      if (this.dataset.activeSessionId === sessionId) {
+        this.dataset.activeSessionId = "";
+        this.renderMessages([]);
+        this.querySelector("[data-active-session-title]").textContent = "no session";
+      }
+    } catch {
+      this.setConnection("err");
+    }
   }
 
   async newSession(workspace) {
@@ -566,17 +655,24 @@ class PiApp extends HTMLElement {
     if (event.key === "Enter") run(items[index]);
   }
 
-  addFiles(files) {
+  async addFiles(files) {
     if (!this.attachments) return;
     for (const file of files || []) {
-      const chip = document.createElement("span");
-      chip.className = "attach-chip";
-      chip.innerHTML = `<span class="ac-glyph">${this.kindGlyph(file)}</span><span class="ac-name"></span><span class="ac-size">${this.formatBytes(file.size)}</span><button class="ac-remove" type="button" data-remove-attachment aria-label="remove">×</button>`;
-      chip.querySelector(".ac-name").textContent = file.name;
-      this.attachments.append(chip);
+      const text = file.size <= 256 * 1024 ? await file.text() : "[file too large to inline]";
+      this.attachmentContents.push(`File: ${file.name}\n\n${text}`);
+      this.addAttachmentChip(file.name, file.size, file);
     }
     this.attachments.hidden = !this.attachments.children.length;
     this.updatePrompt();
+  }
+
+  addAttachmentChip(name, size, file) {
+    const chip = document.createElement("span");
+    chip.className = "attach-chip";
+    chip.dataset.attachmentIndex = String(this.attachmentContents.length - 1);
+    chip.innerHTML = `<span class="ac-glyph">${file ? this.kindGlyph(file) : "file"}</span><span class="ac-name"></span><span class="ac-size">${this.formatBytes(size)}</span><button class="ac-remove" type="button" data-remove-attachment aria-label="remove">×</button>`;
+    chip.querySelector(".ac-name").textContent = name;
+    this.attachments.append(chip);
   }
 
   kindGlyph(file) {

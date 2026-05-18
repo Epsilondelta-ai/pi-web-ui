@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -55,6 +56,7 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 		args := []string{"--session", sessionFile, "--print", text}
 		cmd := exec.CommandContext(ctx, "pi", args...)
 		cmd.Dir = cwd
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			broker.Publish(sessionID, "error", map[string]string{"error": err.Error()})
@@ -65,6 +67,12 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 			broker.Publish(sessionID, "error", map[string]string{"error": err.Error()})
 			return
 		}
+		go func() {
+			<-ctx.Done()
+			if cmd.Process != nil {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			}
+		}()
 
 		var output string
 		stdoutDone := make(chan struct{})
@@ -109,6 +117,16 @@ func (r *Runner) Cancel(sessionID string) bool {
 	return ok
 }
 
+func eventTypeForMessage(msg Message) string {
+	if msg.Kind == "tool" && msg.Status == "running" {
+		return "tool.started"
+	}
+	if msg.Kind == "tool" {
+		return "tool.finished"
+	}
+	return "session.message"
+}
+
 func streamPipe(pipe io.Reader, onLine func(string), done chan<- struct{}) {
 	if done != nil {
 		defer close(done)
@@ -132,7 +150,7 @@ func tailSessionFile(ctx context.Context, broker *Broker, store *Store, sessionI
 		newOffset := readSessionLines(path, offset, func(line string) {
 			if msg, ok := ParsePiSessionLine(line); ok {
 				_ = store.AppendMessage(sessionID, msg)
-				broker.Publish(sessionID, "session.message", msg)
+				broker.Publish(sessionID, eventTypeForMessage(msg), msg)
 				emitted.Add(1)
 			}
 		})
@@ -147,7 +165,7 @@ func tailSessionFile(ctx context.Context, broker *Broker, store *Store, sessionI
 				readSessionLines(path, offset, func(line string) {
 					if msg, ok := ParsePiSessionLine(line); ok {
 						_ = store.AppendMessage(sessionID, msg)
-						broker.Publish(sessionID, "session.message", msg)
+						broker.Publish(sessionID, eventTypeForMessage(msg), msg)
 						emitted.Add(1)
 					}
 				})
