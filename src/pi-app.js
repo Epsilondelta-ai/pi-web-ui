@@ -1,6 +1,8 @@
 import { cancelSession, createSession, deleteSession as deleteSessionRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceFile, getWorkspaceFiles, getWorkspaces, listFolders, openWorkspace, postPrompt, renameSession as renameSessionRequest, sessionEvents } from "./api.js";
 import { escapeHtml, renderAnsiBody, renderBannerBody, renderPiBody, renderTree } from "./renderers.js";
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 class PiApp extends HTMLElement {
   connectedCallback() {
     if (this.bound) return;
@@ -17,15 +19,30 @@ class PiApp extends HTMLElement {
     this.currentFolder = "~";
     this.running = false;
     this.attachmentContents = [];
+    this.spinnerIndex = 0;
     this.bind();
     this.restoreSidebar();
     this.updatePrompt();
     this.scrollTerm();
+    this.startSpinners();
     this.bootstrapAPI();
   }
 
   disconnectedCallback() {
     this.eventSource?.close();
+    if (this.spinnerTimer) clearInterval(this.spinnerTimer);
+  }
+
+  startSpinners() {
+    if (this.spinnerTimer) return;
+    this.spinnerTimer = setInterval(() => this.tickSpinners(), 100);
+  }
+
+  tickSpinners() {
+    this.spinnerIndex = (this.spinnerIndex + 1) % SPINNER_FRAMES.length;
+    this.querySelectorAll(".spinner").forEach((spinner) => {
+      spinner.textContent = SPINNER_FRAMES[this.spinnerIndex];
+    });
   }
 
   bind() {

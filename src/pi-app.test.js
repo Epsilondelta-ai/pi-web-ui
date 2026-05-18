@@ -120,6 +120,18 @@ describe("pi-app runtime", () => {
     expect(app.querySelector(".msg.loading .spinner")).not.toBeNull();
   });
 
+  it("animates spinner frames by swapping glyphs", async () => {
+    const app = document.querySelector("pi-app");
+    await customElements.whenDefined("pi-app");
+    app.connectedCallback();
+    app.renderMessages([]);
+    app.appendLoadingMessage();
+    const spinner = app.querySelector(".spinner");
+    const first = spinner.textContent;
+    app.tickSpinners();
+    expect(spinner.textContent).not.toBe(first);
+  });
+
   it("switches between picker and workspace routes", async () => {
     const app = document.querySelector("pi-app");
     await customElements.whenDefined("pi-app");

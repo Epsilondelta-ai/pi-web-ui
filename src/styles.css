@@ -694,10 +694,6 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   display: inline-block;
   min-width: 1ch;
   font-variant-numeric: tabular-nums;
-  animation: spinner-rotate 0.8s steps(8, end) infinite;
-}
-@keyframes spinner-rotate {
-  to { transform: rotate(1turn); }
 }
 
 .tree {
@@ -1247,7 +1243,7 @@ pre.ascii-banner .dim { color: var(--fg-3); }
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
-  .cursor, .pulse, .spinner { animation: none; opacity: 1; }
+  .cursor, .pulse { animation: none; opacity: 1; }
 }
 
 .density-compact .session-row { padding-top: 5px; padding-bottom: 5px; min-height: 30px; }
