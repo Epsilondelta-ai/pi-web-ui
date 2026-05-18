@@ -1,0 +1,34 @@
+{
+  "$schema": "https://pi.dev/schemas/settings.json",
+  "extensions": ["./extensions"],
+  "skills": ["./skills"],
+  "prompts": ["./prompts"],
+  "packages": [
+    "npm:@juicesharp/rpiv-ask-user-question@1.3.0",
+    "npm:@tmustier/pi-agent-teams@0.5.5",
+    "npm:@zenobius/pi-worktrees@0.5.1",
+    "npm:context-mode@1.0.111",
+    "npm:pi-docparser@1.1.1",
+    "npm:pi-markdown-preview@0.9.8",
+    "npm:pi-mcp-adapter@2.4.2",
+    "npm:pi-subagents@0.24.0",
+    "npm:pi-web-access@0.10.7",
+    "npm:pi-yaml-hooks@2026.5.8",
+    "npm:pi-provider-kimi-code@0.3.0"
+  ],
+  "enableSkillCommands": true,
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "retry": {
+    "enabled": true,
+    "maxRetries": 3,
+    "baseDelayMs": 2000,
+    "provider": {
+      "maxRetryDelayMs": 60000
+    }
+  },
+  "sessionDir": ".pi/sessions"
+}
