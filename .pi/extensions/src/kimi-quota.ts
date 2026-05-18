@@ -333,7 +333,7 @@ function detectKimiProviderKind(
   ctx: Pick<ExtensionContext, "hasUI" | "model">,
 ): KimiProviderKind | undefined {
   if (!ctx.hasUI) return undefined;
-  const model = ctx.model as Record<string, unknown> | undefined;
+  const model = ctx.model as unknown as Record<string, unknown> | undefined;
   if (!model) return undefined;
 
   const provider = String(model.provider ?? "").toLowerCase();
@@ -389,7 +389,7 @@ function hostMatchesDomain(hostname: string, domain: string): boolean {
 }
 
 function modelContextKey(ctx: ExtensionContext): string {
-  const model = ctx.model as Record<string, unknown> | undefined;
+  const model = ctx.model as unknown as Record<string, unknown> | undefined;
   return `${String(model?.provider ?? "none")}:${String(model?.id ?? "none")}:${String(model?.baseUrl ?? "")}`;
 }
 
@@ -586,43 +586,23 @@ function formatKimiCodeUsageFooterText(
     .filter((window): window is KimiQuotaWindow => Boolean(window))
     .map((window) => formatNativeWindow(window));
   if (windows.length === 0) return undefined;
-  const text = windows.join(" │ ");
+  const text = windows.join(" | ");
   return snapshot.stale || snapshot.source === "cached"
     ? `${text} (cached)`
     : text;
 }
 
 function formatNativeWindow(window: KimiQuotaWindow): string {
-  const pct = Math.round(clamp(window.usedPercent, 0, 100));
-  const resetText = window.resetsAtMs
-    ? formatResetDuration(window.resetsAtMs)
-    : "";
-  const base = `${window.label} ${batteryIcon(pct)} ${renderNativeBar(pct, 10)} ${pct}%`;
-  return resetText ? `${base} (${resetText})` : base;
+  const remainingPercent = Math.round(clamp(100 - window.usedPercent, 0, 100));
+  return `${windowDisplayLabel(window.label)} ${batteryIcon(remainingPercent)}(${remainingPercent}%)`;
 }
 
-function renderNativeBar(usedPercent: number, width: number): string {
-  const filled = Math.max(
-    0,
-    Math.min(width, Math.round((clamp(usedPercent, 0, 100) / 100) * width)),
-  );
-  return `${"█".repeat(filled)}${"░".repeat(width - filled)}`;
+function windowDisplayLabel(label: KimiQuotaWindow["label"]): string {
+  return label === "5H:" ? "5h" : "Week";
 }
 
-function batteryIcon(usedPercent: number): string {
-  return usedPercent > 70 ? "🪫" : "🔋";
-}
-
-function formatResetDuration(timestampMs: number, nowMs = Date.now()): string {
-  const remaining = timestampMs - nowMs;
-  if (remaining <= 0) return "";
-  const totalMinutes = Math.max(1, Math.round(remaining / 60_000));
-  const days = Math.floor(totalMinutes / 1_440);
-  const hours = Math.floor((totalMinutes % 1_440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+function batteryIcon(remainingPercent: number): string {
+  return remainingPercent <= 20 ? "🪫" : "🔋";
 }
 
 function formatCurrency(value: number): string {
