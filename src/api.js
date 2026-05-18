@@ -38,8 +38,8 @@ export function openWorkspace(path) {
   });
 }
 
-export function pickWorkspaceFolder() {
-  return request("/api/system/folder-picker", { method: "POST" });
+export function listFolders(path = "~") {
+  return request(`/api/system/folders?path=${encodeURIComponent(path)}`);
 }
 
 export function getWorkspaceSessions(workspaceId) {

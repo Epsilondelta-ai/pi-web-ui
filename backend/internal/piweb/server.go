@@ -51,7 +51,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/health", s.health)
-	s.mux.HandleFunc("POST /api/system/folder-picker", s.pickFolder)
+	s.mux.HandleFunc("GET /api/system/folders", s.listFolders)
 	s.mux.HandleFunc("GET /api/workspaces", s.workspaces)
 	s.mux.HandleFunc("POST /api/workspaces/open", s.openWorkspace)
 	s.mux.HandleFunc("DELETE /api/workspaces/{workspaceID}", s.deleteWorkspace)
@@ -72,13 +72,17 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().UTC()})
 }
 
-func (s *Server) pickFolder(w http.ResponseWriter, r *http.Request) {
-	path, err := PickWorkspaceFolder()
+func (s *Server) listFolders(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "~"
+	}
+	folders, err := ListFolders(path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+	writeJSON(w, http.StatusOK, folders)
 }
 
 func (s *Server) workspaces(w http.ResponseWriter, r *http.Request) {

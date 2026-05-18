@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelSession, createSession, deleteSession, deleteWorkspace, getSession, getWorkspaceFile, getWorkspaces, pickWorkspaceFolder, postPrompt, renameSession, sessionEvents } from "./api.js";
+import { cancelSession, createSession, deleteSession, deleteWorkspace, getSession, getWorkspaceFile, getWorkspaces, listFolders, postPrompt, renameSession, sessionEvents } from "./api.js";
 
 describe("api adapter", () => {
   beforeEach(() => {
@@ -27,10 +27,9 @@ describe("api adapter", () => {
     expect(result.url).toBe("http://backend.test/api/sessions/a%2Fb");
   });
 
-  it("asks backend to open a native folder picker", async () => {
-    const result = await pickWorkspaceFolder();
-    expect(result.url).toBe("http://backend.test/api/system/folder-picker");
-    expect(result.options.method).toBe("POST");
+  it("lists folders from the backend browser", async () => {
+    const result = await listFolders("~");
+    expect(result.url).toBe("http://backend.test/api/system/folders?path=~");
   });
 
   it("creates sessions in a workspace", async () => {

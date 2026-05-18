@@ -1061,6 +1061,54 @@ pre.ascii-banner .dim { color: var(--fg-3); }
 .input-row .open-btn:hover { filter: brightness(1.1); }
 .input-row .open-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.folder-browser {
+  margin: 0 16px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  max-height: 320px;
+  overflow: hidden;
+}
+.folder-browser-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-dim);
+  font-size: 12px;
+}
+.folder-browser-head button,
+.folder-row {
+  color: var(--fg-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.folder-browser-head button:hover,
+.folder-row:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.folder-list {
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+}
+.folder-row {
+  display: grid;
+  grid-template-columns: 16px 160px 1fr;
+  width: 100%;
+  text-align: left;
+  margin: 2px 0;
+  gap: 8px;
+  font-size: 12px;
+}
+.folder-row .folder-path,
+.folder-empty {
+  color: var(--fg-3);
+}
+
 .scrim {
   display: none;
   position: absolute;

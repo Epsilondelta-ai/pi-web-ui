@@ -1,4 +1,4 @@
-import { cancelSession, createSession, deleteSession as deleteSessionRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceFile, getWorkspaceFiles, getWorkspaces, openWorkspace, pickWorkspaceFolder, postPrompt, renameSession as renameSessionRequest, sessionEvents } from "./api.js";
+import { cancelSession, createSession, deleteSession as deleteSessionRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceFile, getWorkspaceFiles, getWorkspaces, listFolders, openWorkspace, postPrompt, renameSession as renameSessionRequest, sessionEvents } from "./api.js";
 import { escapeHtml, renderAnsiBody, renderBannerBody, renderPiBody, renderTree } from "./renderers.js";
 
 class PiApp extends HTMLElement {
@@ -14,6 +14,7 @@ class PiApp extends HTMLElement {
     this.termInner = this.querySelector(".term-inner");
     this.eventSource = null;
     this.apiConnected = false;
+    this.currentFolder = "~";
     this.running = false;
     this.attachmentContents = [];
     this.bind();
@@ -306,18 +307,49 @@ class PiApp extends HTMLElement {
   }
 
   async browseFolder() {
+    this.querySelector("[data-folder-browser]")?.removeAttribute("hidden");
+    await this.loadFolder(this.currentFolder || "~");
+  }
+
+  async loadFolder(path = "~") {
     if (!this.apiConnected) {
       this.setConnection("err");
       return;
     }
     try {
-      const { path } = await pickWorkspaceFolder();
+      const listing = await listFolders(path || "~");
+      this.currentFolder = listing.path;
+      this.currentFolderParent = listing.parent || listing.path;
       const input = this.querySelector('[data-path-form] input[name="path"]');
-      if (input) input.value = path;
-      if (path) await this.openWorkspacePath(path);
+      if (input) input.value = listing.path;
+      const label = this.querySelector("[data-folder-path]");
+      if (label) label.textContent = listing.displayPath || listing.path;
+      const list = this.querySelector("[data-folder-list]");
+      if (list) {
+        list.replaceChildren();
+        for (const folder of listing.folders || []) list.append(this.folderRow(folder));
+        if (!listing.folders?.length) {
+          const empty = document.createElement("div");
+          empty.className = "folder-empty";
+          empty.textContent = "no folders";
+          list.append(empty);
+        }
+      }
     } catch {
       this.setConnection("err");
     }
+  }
+
+  folderRow(folder) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "folder-row";
+    row.dataset.action = "folder-enter";
+    row.dataset.path = folder.path;
+    row.innerHTML = `<span>▸</span><span class="folder-name"></span><span class="folder-path"></span>`;
+    row.querySelector(".folder-name").textContent = folder.name;
+    row.querySelector(".folder-path").textContent = folder.displayPath || folder.path;
+    return row;
   }
 
   async openWorkspacePath(path) {
@@ -393,6 +425,9 @@ class PiApp extends HTMLElement {
     if (action === "route-picker") this.route("picker");
     if (action === "route-workspace") this.route("workspace");
     if (action === "browse-folder") this.browseFolder();
+    if (action === "folder-enter") this.loadFolder(actionTarget.dataset.path);
+    if (action === "folder-up") this.loadFolder(this.currentFolderParent);
+    if (action === "folder-open-current") this.openWorkspacePath(this.currentFolder);
     if (action === "toggle-tree") this.toggleTree();
     if (action === "toggle-tree-node") this.toggleTreeNode(button);
     if (action === "open-file") this.openFile(button);

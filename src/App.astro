@@ -75,7 +75,11 @@ function toolStatus(msg) {
           <button class="browse-btn" type="button" data-action="browse-folder" title="Choose a local folder">browse…</button>
           <button class="open-btn" type="submit" aria-label="open typed path">open ↵</button>
         </form>
-        <div style="padding:0 16px 12px;font-size:11px;color:var(--fg-3)">paste a path, or drop a folder onto the window.</div>
+        <div style="padding:0 16px 12px;font-size:11px;color:var(--fg-3)">paste a path, browse from <code>~</code>, or drop a folder onto the window.</div>
+        <div class="folder-browser" data-folder-browser hidden>
+          <div class="folder-browser-head"><button type="button" data-action="folder-up">↑ up</button><span data-folder-path>~</span><button type="button" data-action="folder-open-current">open this folder</button></div>
+          <div class="folder-list" data-folder-list></div>
+        </div>
       </div>
       <div class="picker-card">
         <div class="card-head"><span class="left">recent workspaces</span><span class="right" data-workspace-count>{workspaces.length} known</span></div>

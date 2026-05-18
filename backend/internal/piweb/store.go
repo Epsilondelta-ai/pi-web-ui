@@ -317,6 +317,10 @@ func ValidateWorkspacePath(path string) (string, error) {
 	if path == "" {
 		return "", errors.New("path is required")
 	}
+	path, err := ExpandUserPath(path)
+	if err != nil {
+		return "", err
+	}
 	if strings.Contains(path, "\x00") {
 		return "", errors.New("path contains null byte")
 	}

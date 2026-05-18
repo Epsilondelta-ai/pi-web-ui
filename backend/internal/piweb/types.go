@@ -77,6 +77,20 @@ type FileContent struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
+type FolderEntry struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	DisplayPath string `json:"displayPath"`
+}
+
+type FolderListing struct {
+	Path              string        `json:"path"`
+	DisplayPath       string        `json:"displayPath"`
+	Parent            string        `json:"parent,omitempty"`
+	ParentDisplayPath string        `json:"parentDisplayPath,omitempty"`
+	Folders           []FolderEntry `json:"folders"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
