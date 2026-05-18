@@ -1,3 +1,6 @@
+import { getGitStatus, getSession, getWorkspaceFiles, getWorkspaces, openWorkspace, postPrompt, sessionEvents } from "./api.js";
+import { escapeHtml, renderAnsiBody, renderBannerBody, renderPiBody, renderTree } from "./renderers.js";
+
 class PiApp extends HTMLElement {
   connectedCallback() {
     if (this.bound) return;
@@ -8,18 +11,23 @@ class PiApp extends HTMLElement {
     this.file = this.querySelector("[data-file-input]");
     this.attachments = this.querySelector(".attach-chips");
     this.slash = this.querySelector(".slash-pop");
+    this.termInner = this.querySelector(".term-inner");
+    this.eventSource = null;
+    this.apiConnected = false;
     this.bind();
     this.restoreSidebar();
     this.updatePrompt();
     this.scrollTerm();
+    this.bootstrapAPI();
+  }
+
+  disconnectedCallback() {
+    this.eventSource?.close();
   }
 
   bind() {
     this.addEventListener("click", (event) => this.click(event));
-    this.querySelector("[data-path-form]")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      this.route("workspace");
-    });
+    this.querySelector("[data-path-form]")?.addEventListener("submit", (event) => this.submitWorkspacePath(event));
     this.prompt?.addEventListener("input", () => this.updatePrompt());
     this.prompt?.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") this.submitPrompt();
@@ -34,6 +42,278 @@ class PiApp extends HTMLElement {
       if (event.data?.type === "__deactivate_edit_mode") this.querySelector("[data-tweaks]")?.setAttribute("hidden", "");
     });
     window.parent?.postMessage({ type: "__edit_mode_available" }, "*");
+  }
+
+  async bootstrapAPI() {
+    try {
+      const [{ workspaces }] = await Promise.all([getWorkspaces()]);
+      this.apiConnected = true;
+      this.setConnection("ok");
+      this.renderWorkspaces(workspaces || []);
+      const activeWorkspace = workspaces?.[0];
+      const activeSession = activeWorkspace?.sessions?.[0];
+      if (activeWorkspace) {
+        this.dataset.activeWorkspaceId = activeWorkspace.id;
+        await this.loadWorkspaceMeta(activeWorkspace.id);
+      }
+      if (activeSession) await this.loadSession(activeSession.id);
+    } catch {
+      this.apiConnected = false;
+      this.setConnection("err");
+    }
+  }
+
+  async loadWorkspaceMeta(workspaceId) {
+    try {
+      const [{ files }, git] = await Promise.all([getWorkspaceFiles(workspaceId), getGitStatus(workspaceId)]);
+      const list = this.querySelector(".tree-list");
+      if (list && files) {
+        list.innerHTML = `${renderTree(files)}<div style="padding:8px 16px;color:var(--fg-4);font-size:11px;font-style:italic">tip: pi watches the tree · changes appear here.</div>`;
+      }
+      const status = this.querySelector("[data-git-status]");
+      if (status && git) status.textContent = `${git.branch} · ${git.dirty} ✱`;
+    } catch {}
+  }
+
+  async loadSession(sessionId) {
+    try {
+      const { session, messages } = await getSession(sessionId);
+      this.dataset.activeSessionId = session.id;
+      const title = this.querySelector("[data-active-session-title]");
+      if (title) {
+        title.textContent = session.title;
+        title.title = `${session.title} · ${session.id}`;
+      }
+      this.renderMessages(messages || []);
+      this.connectEvents(session.id);
+    } catch {
+      this.setConnection("err");
+    }
+  }
+
+  connectEvents(sessionId) {
+    this.eventSource?.close();
+    this.eventSource = sessionEvents(sessionId, {
+      onOpen: () => this.setConnection("ok"),
+      onError: () => this.setConnection("err"),
+      onEvent: (event) => this.applyEvent(event),
+    });
+  }
+
+  applyEvent(event) {
+    if (event.type === "heartbeat") return;
+    if (event.type === "session.status") {
+      this.setMode(event.payload?.status || "auto-accept");
+      return;
+    }
+    if (event.type === "session.message") {
+      this.appendMessage(event.payload);
+      return;
+    }
+    if (event.type === "tool.started") {
+      this.appendMessage(event.payload);
+      return;
+    }
+    if (event.type === "tool.output") {
+      this.appendToolOutput(event.payload);
+      return;
+    }
+    if (event.type === "tool.finished") {
+      this.finishTool(event.payload);
+    }
+  }
+
+  setConnection(status) {
+    const indicator = this.querySelector(".statusbtn");
+    if (!indicator) return;
+    indicator.style.color = status === "ok" ? "var(--accent)" : "var(--danger)";
+    indicator.title = status === "ok" ? "connected" : "backend disconnected";
+  }
+
+  setMode(mode) {
+    this.querySelectorAll(".context-strip .chip").forEach((chip) => {
+      if (chip.querySelector(".lbl")?.textContent === "mode") chip.querySelector(".val").textContent = mode;
+    });
+    const promptMode = this.querySelector(".prompt-meta .dim:nth-of-type(2)");
+    if (promptMode) promptMode.textContent = mode;
+  }
+
+  renderWorkspaces(workspaces) {
+    const count = this.querySelector("[data-workspace-count]");
+    if (count) count.textContent = `${workspaces.length} known`;
+    const recentCard = this.querySelector(".picker-card:nth-of-type(2)");
+    if (recentCard) {
+      recentCard.querySelectorAll(".recent-row").forEach((row) => row.remove());
+      for (const workspace of workspaces.slice(0, 4)) recentCard.append(this.createRecentWorkspace(workspace));
+    }
+    const section = this.querySelector(".sidebar .sb-section");
+    if (section) {
+      section.querySelectorAll(".workspace-group").forEach((group) => group.remove());
+      const head = section.querySelector(".sb-head");
+      for (const workspace of workspaces) head.insertAdjacentElement("afterend", this.createWorkspaceGroup(workspace));
+    }
+  }
+
+  createRecentWorkspace(workspace) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "recent-row";
+    row.dataset.workspace = workspace.id;
+    row.setAttribute("aria-label", `open ${workspace.name}`);
+    row.innerHTML = `<span class="glyph">▸</span><span class="ws-info"><span class="name"></span><span class="path"></span></span><span class="ws-stat"></span><span class="open-cta">open ↵</span>`;
+    row.querySelector(".name").textContent = workspace.name;
+    row.querySelector(".path").textContent = workspace.path;
+    row.querySelector(".ws-stat").innerHTML = workspace.live ? `<span class="live">● live</span><span class="lbl">${workspace.sessionCount} sessions</span>` : `<span>${escapeHtml(workspace.lastUsed || "—")}</span><span class="lbl">${workspace.sessionCount} sessions</span>`;
+    return row;
+  }
+
+  createWorkspaceGroup(workspace) {
+    const group = document.createElement("div");
+    group.className = "workspace-group";
+    group.dataset.workspaceGroup = workspace.id;
+    group.innerHTML = `<button type="button" class="ws-row" data-action="toggle-workspace" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="false"><span class="caret">▸</span><span class="ws-stack"><span class="ws-name"><span class="dot"></span><span class="label"></span></span><span class="ws-path"></span></span><span class="ws-meta">${workspace.sessionCount}</span></button><div class="sessions" hidden><button type="button" class="session-row new-session-row" data-action="new-session" data-workspace="${escapeHtml(workspace.id)}"><span class="gutter">+</span><span class="title">new session</span><span class="meta">N</span></button></div>`;
+    group.querySelector(".label").textContent = workspace.name;
+    group.querySelector(".ws-path").textContent = workspace.path;
+    group.querySelector(".dot").classList.toggle("live", !!workspace.live);
+    const sessions = group.querySelector(".sessions");
+    for (const session of workspace.sessions || []) sessions.append(this.createSessionRow(workspace.id, session));
+    return group;
+  }
+
+  createSessionRow(workspaceId, session) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "session-row";
+    row.dataset.session = session.id;
+    row.dataset.workspace = workspaceId;
+    row.dataset.title = session.title;
+    row.innerHTML = `<span class="gutter"></span><span class="title"></span><span class="meta"></span>`;
+    row.querySelector(".title").append(document.createTextNode(session.title));
+    const sid = document.createElement("span");
+    sid.className = "sid";
+    sid.textContent = session.id;
+    row.querySelector(".title").append(sid);
+    row.querySelector(".meta").textContent = session.lastUsed;
+    row.querySelector(".meta").classList.toggle("live", !!session.live);
+    row.classList.toggle("active", session.active || session.id === this.dataset.activeSessionId);
+    return row;
+  }
+
+  renderMessages(messages) {
+    if (!this.termInner) return;
+    this.termInner.replaceChildren();
+    for (const msg of messages) this.appendMessage(msg);
+    this.scrollTerm();
+  }
+
+  appendMessage(msg) {
+    if (!this.termInner || !msg) return;
+    this.termInner.append(this.messageNode(msg));
+    this.scrollTerm();
+  }
+
+  messageNode(msg) {
+    if (msg.kind === "banner") {
+      const pre = document.createElement("pre");
+      pre.className = "ascii-banner";
+      pre.innerHTML = renderBannerBody(msg.text);
+      return pre;
+    }
+    if (msg.kind === "user") return this.simpleMessage("user", "you >", msg.text);
+    if (msg.kind === "think") {
+      const row = this.simpleMessage("think", "…", "");
+      row.querySelector(".body").innerHTML = `<div class="thinking-block"><span class="label">thinking</span>${escapeHtml(msg.text)}</div>`;
+      return row;
+    }
+    if (msg.kind === "pi") {
+      const row = this.simpleMessage("pi", "pi >", "");
+      row.querySelector(".body").innerHTML = renderPiBody(msg.text);
+      return row;
+    }
+    if (msg.kind === "tool") return this.toolCard(msg);
+    return this.simpleMessage("pi", "pi >", JSON.stringify(msg));
+  }
+
+  simpleMessage(kind, prefix, text) {
+    const row = document.createElement("div");
+    row.className = "msg";
+    row.innerHTML = `<div class="prefix ${kind}"></div><div class="body"></div>`;
+    row.querySelector(".prefix").textContent = prefix;
+    row.querySelector(".body").textContent = text;
+    return row;
+  }
+
+  toolCard(msg) {
+    const card = document.createElement("div");
+    card.className = `tool-card ${msg.collapsedByDefault ? "collapsed" : ""}`.trim();
+    card.dataset.tool = msg.tool || "tool";
+    const collapsed = !!msg.collapsedByDefault;
+    card.innerHTML = `<button type="button" class="tc-head" aria-expanded="${!collapsed}" data-action="toggle-tool"><span class="tc-glyph">●</span><span class="tc-name"></span><span class="tc-args"></span><span class="tc-meta"></span></button><div class="tc-body"${collapsed || !msg.body ? " hidden" : ""}></div>`;
+    card.querySelector(".tc-name").textContent = msg.tool || "tool";
+    card.querySelector(".tc-args").textContent = msg.args || "";
+    card.querySelector(".tc-meta").innerHTML = this.toolStatus(msg);
+    if (msg.body) card.querySelector(".tc-body").innerHTML = renderAnsiBody(msg.body);
+    return card;
+  }
+
+  toolStatus(msg) {
+    if (msg.status === "running") return `<span class="spinner">⠋</span><span style="color:var(--accent)">running</span><span class="tc-caret">▾</span>`;
+    if (msg.status === "err") return `<span class="err">✗</span>${escapeHtml(msg.resultMeta || "failed")}<span class="tc-caret">▾</span>`;
+    return `<span class="ok">✓</span>${msg.durationMs ? `${msg.durationMs} ms` : ""}${msg.resultMeta ? ` · ${escapeHtml(msg.resultMeta)}` : ""}<span class="tc-caret">▾</span>`;
+  }
+
+  appendToolOutput(payload) {
+    const card = [...this.querySelectorAll(".tool-card")].reverse().find((item) => item.dataset.tool === payload?.tool);
+    const body = card?.querySelector(".tc-body");
+    if (!body) return;
+    body.hidden = false;
+    body.textContent += `${body.textContent ? "\n" : ""}${payload.chunk || ""}`;
+  }
+
+  finishTool(msg) {
+    const card = [...this.querySelectorAll(".tool-card")].reverse().find((item) => item.dataset.tool === msg?.tool);
+    if (!card) {
+      this.appendMessage(msg);
+      return;
+    }
+    const next = this.toolCard(msg);
+    card.replaceWith(next);
+  }
+
+  async submitWorkspacePath(event) {
+    event.preventDefault();
+    const input = event.currentTarget.querySelector("input[name='path']");
+    const path = input?.value.trim();
+    if (!path) return;
+    if (this.apiConnected) {
+      try {
+        await openWorkspace(path);
+        const { workspaces } = await getWorkspaces();
+        this.renderWorkspaces(workspaces || []);
+      } catch {
+        this.setConnection("err");
+      }
+    }
+    this.route("workspace");
+  }
+
+  async submitPrompt() {
+    const text = this.prompt?.value.trim() || "";
+    if (!text && !this.attachments?.children.length) return;
+    const sessionId = this.dataset.activeSessionId;
+    if (this.apiConnected && sessionId && text) {
+      try {
+        await postPrompt(sessionId, text);
+      } catch {
+        this.setConnection("err");
+      }
+    } else if (text) {
+      this.appendMessage({ kind: "user", text });
+    }
+    if (this.prompt) this.prompt.value = "";
+    this.attachments?.replaceChildren();
+    if (this.attachments) this.attachments.hidden = true;
+    this.updatePrompt();
   }
 
   click(event) {
@@ -59,14 +339,22 @@ class PiApp extends HTMLElement {
     if (action === "new-session") this.newSession(button.dataset.workspace);
     if (action === "close-tweaks") this.querySelector("[data-tweaks]")?.setAttribute("hidden", "");
     if (button.dataset.session) this.pickSession(button);
-    if (button.dataset.workspace && button.classList.contains("recent-row")) this.route("workspace");
+    if (button.dataset.workspace && button.classList.contains("recent-row")) this.openWorkspace(button.dataset.workspace);
     if (button.dataset.seed) this.seed(button.dataset.seed);
     if (button.dataset.skill) this.seed(`/skill ${button.dataset.skill}\n\n`);
     if (button.dataset.slash) this.pickSlash(button.dataset.slash);
   }
 
+  async openWorkspace(workspaceId) {
+    this.dataset.activeWorkspaceId = workspaceId;
+    const workspaceName = this.querySelector(`[data-workspace='${workspaceId}'] .label`)?.textContent || workspaceId;
+    const activeWorkspace = this.querySelector("[data-active-workspace]");
+    if (activeWorkspace) activeWorkspace.textContent = workspaceName;
+    await this.loadWorkspaceMeta(workspaceId);
+    this.route("workspace");
+  }
+
   shortcut(event) {
-    const meta = event.metaKey || event.ctrlKey;
     if (event.key === "Escape") this.closeModals();
   }
 
@@ -156,14 +444,19 @@ class PiApp extends HTMLElement {
     });
   }
 
-  pickSession(button) {
+  async pickSession(button) {
     this.querySelectorAll(".session-row.active").forEach((row) => row.classList.remove("active"));
     button.classList.add("active");
     const title = this.querySelector("[data-active-session-title]");
-    if (title) title.textContent = button.dataset.title;
+    if (title) {
+      title.textContent = button.dataset.title;
+      title.title = `${button.dataset.title} · ${button.dataset.session}`;
+    }
     this.querySelector("[data-main='session']")?.removeAttribute("hidden");
     this.querySelector("[data-main='empty']")?.setAttribute("hidden", "");
     this.querySelector(".app-body")?.classList.remove("drawer-open");
+    if (this.apiConnected) await this.loadSession(button.dataset.session);
+    else this.dataset.activeSessionId = button.dataset.session;
     this.scrollTerm();
   }
 
@@ -226,7 +519,7 @@ class PiApp extends HTMLElement {
 
   navigateList(event, selector, run) {
     event.preventDefault();
-    const items = [...this.querySelectorAll(selector)];
+    const items = [...this.querySelectorAll(selector)].filter((item) => !item.hidden);
     if (!items.length) return;
     let index = Math.max(0, items.findIndex((item) => item.classList.contains("selected")));
     if (event.key === "ArrowDown") index = Math.min(items.length - 1, index + 1);
@@ -261,13 +554,6 @@ class PiApp extends HTMLElement {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
     return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  }
-
-  submitPrompt() {
-    if (this.prompt) this.prompt.value = "";
-    this.attachments?.replaceChildren();
-    if (this.attachments) this.attachments.hidden = true;
-    this.updatePrompt();
   }
 
   scrollTerm() {

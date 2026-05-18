@@ -1,6 +1,7 @@
 package piweb
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -130,7 +131,7 @@ func (s *Server) prompt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("text is required"))
 		return
 	}
-	go s.broker.PublishMockPrompt(r.Context(), s.store, sessionID, req.Text)
+	go s.broker.PublishMockPrompt(s.context(), s.store, sessionID, req.Text)
 	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true})
 }
 
@@ -141,6 +142,10 @@ func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.broker.ServeSession(w, r, sessionID)
+}
+
+func (s *Server) context() context.Context {
+	return context.Background()
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {

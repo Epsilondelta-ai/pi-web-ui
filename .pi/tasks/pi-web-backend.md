@@ -90,10 +90,12 @@ data: {"sessionId":"...","payload":{}}
 
 ### 5. Frontend API adapter
 
-- Add frontend API module.
-- Replace direct fixture reads step-by-step.
-- Add `EventSource` session stream adapter.
-- Handle reconnect and `Last-Event-ID` later if needed.
+- Added frontend API module at `src/api.js`.
+- Added `EventSource` session stream adapter.
+- Runtime now tries backend API first and falls back to static SSR fixtures when unavailable.
+- Session prompt submit posts to backend and consumes streamed SSE events.
+- Workspace/session/file metadata refresh from backend when connected.
+- Reconnect and `Last-Event-ID` remain later work.
 
 ### 6. Real pi bridge
 

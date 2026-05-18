@@ -38,7 +38,7 @@ function toolStatus(msg) {
 
 ---
 
-<pi-app class="app" data-route={initialRoute} data-tree={treeOpen ? "on" : "off"} data-sidebar={sidebarCollapsed ? "collapsed" : "open"} data-session={initialSession}>
+<pi-app class="app" data-route={initialRoute} data-tree={treeOpen ? "on" : "off"} data-sidebar={sidebarCollapsed ? "collapsed" : "open"} data-session={initialSession} data-active-session-id={activeSession.id} data-active-workspace-id={activeWorkspace.id}>
   <header class="topbar">
     <button class="sb-expand-btn" type="button" data-action="expand-sidebar" aria-label="show sidebar" style={sidebarCollapsed ? "display:inline-flex" : "display:none"}>›</button>
     <button class="hamburger" type="button" data-action="open-drawer" aria-label="open sidebar">≡</button>
@@ -73,7 +73,7 @@ function toolStatus(msg) {
         <div style="padding:0 16px 12px;font-size:11px;color:var(--fg-3)">paste a path, or drop a folder onto the window.</div>
       </div>
       <div class="picker-card">
-        <div class="card-head"><span class="left">recent workspaces</span><span class="right">{PI_DATA.WORKSPACES.length} known</span></div>
+        <div class="card-head"><span class="left">recent workspaces</span><span class="right" data-workspace-count>{PI_DATA.WORKSPACES.length} known</span></div>
         {PI_DATA.WORKSPACES.slice(0, 4).map((workspace) => (
           <button class="recent-row" type="button" data-workspace={workspace.id} aria-label={`open ${workspace.name}`}>
             <span class="glyph">▸</span>
@@ -150,7 +150,7 @@ function toolStatus(msg) {
     </main>
 
     <aside class="tree" aria-label="file tree" hidden={treeHidden}> 
-      <div class="tree-head"><span>files</span><span class="branch">main · 3 ✱</span></div>
+      <div class="tree-head"><span>files</span><span class="branch" data-git-status>main · 3 ✱</span></div>
       <div class="tree-list">
         <Fragment set:html={renderTree(PI_DATA.FILE_TREE)} />
         <div style="padding:8px 16px;color:var(--fg-4);font-size:11px;font-style:italic">tip: pi watches the tree · changes appear here.</div>
