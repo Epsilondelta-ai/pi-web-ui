@@ -924,25 +924,12 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   gap: var(--space-5);
 }
 
-.picker-banner {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.1;
-  color: var(--accent);
-  white-space: pre;
-  margin: 0;
-  user-select: none;
-  overflow: hidden;
-}
-@media (min-width: 600px) {
-  .picker-banner { font-size: 11px; }
-}
 
 .picker-tag {
   color: var(--fg-2);
   font-size: var(--text-sm);
   line-height: 1.5;
-  margin-top: var(--space-1);
+  margin: 0;
   max-width: 60ch;
 }
 .picker-tag .accent { color: var(--accent); }
