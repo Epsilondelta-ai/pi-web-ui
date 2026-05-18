@@ -6,7 +6,7 @@ describe("pi-app runtime", () => {
     document.body.innerHTML = `
       <pi-app data-tree="on" data-sidebar="open">
         <section data-view="picker" hidden></section>
-        <section class="app-body with-tree" data-view="workspace"><div class="sidebar-wrap"></div><aside class="tree"></aside></section>
+        <section class="app-body with-tree" data-view="workspace"><div class="sidebar-wrap"></div><main><div class="term-inner"></div></main><aside class="tree"></aside></section>
         <button class="sb-expand-btn"></button>
         <div class="prompt-region">
           <div class="slash-pop" hidden><button class="slash-item selected" data-slash="/model">/model</button></div>
@@ -41,6 +41,20 @@ describe("pi-app runtime", () => {
     toggle.click();
     expect(row.querySelector(".session-menu").hidden).toBe(false);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("deduplicates echoed user prompts and removes loading on response", async () => {
+    const app = document.querySelector("pi-app");
+    await customElements.whenDefined("pi-app");
+    app.connectedCallback();
+    app.renderMessages([]);
+    app.appendMessage({ kind: "user", text: "hello" });
+    app.appendLoadingMessage();
+    app.appendMessage({ kind: "user", text: "hello" });
+    expect(app.querySelectorAll(".msg[data-kind='user']")).toHaveLength(1);
+    expect(app.querySelector(".msg.loading")).not.toBeNull();
+    app.appendMessage({ kind: "pi", text: "world" });
+    expect(app.querySelector(".msg.loading")).toBeNull();
   });
 
   it("switches between picker and workspace routes", async () => {

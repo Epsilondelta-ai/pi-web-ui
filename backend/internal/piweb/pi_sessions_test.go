@@ -13,6 +13,13 @@ func TestParsePiSessionLine(t *testing.T) {
 	}
 }
 
+func TestParsePiSessionLineMessagesKeepsThinkingAndAnswer(t *testing.T) {
+	messages := ParsePiSessionLineMessages(`{"type":"message","id":"b","parentId":"a","timestamp":"2026-01-01T00:00:02.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"checking"},{"type":"text","text":"done"}]}}`)
+	if len(messages) != 2 || messages[0].Kind != "think" || messages[1].Kind != "pi" || messages[1].Text != "done" {
+		t.Fatalf("unexpected messages: %#v", messages)
+	}
+}
+
 func TestParsePiSessionFile(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "session.jsonl")

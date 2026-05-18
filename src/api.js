@@ -96,7 +96,7 @@ export function sessionEvents(sessionId, { onEvent, onOpen, onError } = {}) {
   const source = new EventSource(`${apiBase()}/api/sessions/${encodeURIComponent(sessionId)}/events`);
   source.onopen = () => onOpen?.();
   source.onerror = (event) => onError?.(event);
-  const types = ["session.message", "session.status", "tool.started", "tool.output", "tool.finished", "workspace.files.changed", "error", "heartbeat"];
+  const types = ["session.message", "session.status", "session.renamed", "tool.started", "tool.output", "tool.finished", "workspace.files.changed", "error", "heartbeat"];
   for (const type of types) {
     source.addEventListener(type, (message) => {
       try {

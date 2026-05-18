@@ -235,6 +235,31 @@ func (s *Store) Session(sessionID string) (Session, []Message, error) {
 	return Session{}, nil, ErrNotFound
 }
 
+func (s *Store) AutoNameSession(sessionID, prompt string) (Session, bool, error) {
+	title := trimTitle(prompt)
+	if title == "" {
+		return Session{}, false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for wi := range s.workspaces {
+		for si := range s.workspaces[wi].Sessions {
+			if s.workspaces[wi].Sessions[si].ID == sessionID {
+				current := strings.TrimSpace(s.workspaces[wi].Sessions[si].Title)
+				if current != "" && current != "new session" {
+					return s.workspaces[wi].Sessions[si], false, nil
+				}
+				s.workspaces[wi].Sessions[si].Title = title
+				if err := appendSessionInfo(s.sessionFiles[sessionID], title); err != nil {
+					return Session{}, false, err
+				}
+				return s.workspaces[wi].Sessions[si], true, nil
+			}
+		}
+	}
+	return Session{}, false, ErrNotFound
+}
+
 func (s *Store) RenameSession(sessionID, title string) (Session, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {

@@ -179,8 +179,8 @@ func ParsePiSessionFile(path string) (ParsedSession, error) {
 				title = entry.Name
 			}
 		case "message":
-			msg, ok := convertAgentMessage(entry.Message)
-			if ok {
+			converted := convertAgentMessages(entry.Message)
+			for _, msg := range converted {
 				messages = append(messages, msg)
 				if title == "" && msg.Kind == "user" {
 					title = trimTitle(msg.Text)
@@ -205,51 +205,52 @@ func ParsePiSessionFile(path string) (ParsedSession, error) {
 }
 
 func ParsePiSessionLine(line string) (Message, bool) {
+	messages := ParsePiSessionLineMessages(line)
+	if len(messages) == 0 {
+		return Message{}, false
+	}
+	return messages[0], true
+}
+
+func ParsePiSessionLineMessages(line string) []Message {
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return Message{}, false
+		return nil
 	}
 	var entry sessionEntry
 	if err := json.Unmarshal([]byte(line), &entry); err != nil {
-		return Message{}, false
+		return nil
 	}
 	switch entry.Type {
 	case "message":
-		return convertAgentMessage(entry.Message)
+		return convertAgentMessages(entry.Message)
 	case "compaction":
-		return Message{Kind: "pi", Text: fmt.Sprintf("context summarized · %d tokens before compaction", entry.TokensBefore)}, true
+		return []Message{{Kind: "pi", Text: fmt.Sprintf("context summarized · %d tokens before compaction", entry.TokensBefore)}}
 	case "model_change":
-		return Message{Kind: "banner", Text: fmt.Sprintf("model changed · %s/%s", entry.Provider, entry.ModelID)}, true
+		return []Message{{Kind: "banner", Text: fmt.Sprintf("model changed · %s/%s", entry.Provider, entry.ModelID)}}
 	case "thinking_level_change":
-		return Message{Kind: "banner", Text: fmt.Sprintf("thinking level · %s", entry.ThinkingLevel)}, true
+		return []Message{{Kind: "banner", Text: fmt.Sprintf("thinking level · %s", entry.ThinkingLevel)}}
 	default:
-		return Message{}, false
+		return nil
 	}
 }
 
-func convertAgentMessage(raw json.RawMessage) (Message, bool) {
+func convertAgentMessages(raw json.RawMessage) []Message {
 	var msg agentMessage
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		return Message{}, false
+		return nil
 	}
 	switch msg.Role {
 	case "user":
-		return Message{Kind: "user", Text: contentText(msg.Content)}, true
+		return []Message{{Kind: "user", Text: contentText(msg.Content)}}
 	case "assistant":
-		text, thinking, tool := assistantContent(msg.Content)
-		if thinking != "" {
-			return Message{Kind: "think", Text: thinking}, true
-		}
-		if tool.Tool != "" {
-			return tool, true
-		}
-		return Message{Kind: "pi", Text: text}, true
+		return assistantMessages(msg.Content)
 	case "toolResult":
 		status := "ok"
 		if msg.IsError {
 			status = "err"
 		}
-		return Message{Kind: "tool", Tool: msg.ToolName, Status: status, Body: contentText(msg.Content), CollapsedByDefault: true}, true
+		return []Message{{Kind: "tool", Tool: msg.ToolName, Status: status, Body: contentText(msg.Content), CollapsedByDefault: true}}
 	case "bashExecution":
 		status := "ok"
 		if msg.ExitCode != nil && *msg.ExitCode != 0 {
@@ -258,11 +259,11 @@ func convertAgentMessage(raw json.RawMessage) (Message, bool) {
 		if msg.Cancelled {
 			status = "err"
 		}
-		return Message{Kind: "tool", Tool: "bash", Args: msg.Command, Status: status, Body: msg.Output, CollapsedByDefault: true}, true
+		return []Message{{Kind: "tool", Tool: "bash", Args: msg.Command, Status: status, Body: msg.Output, CollapsedByDefault: true}}
 	case "custom":
-		return Message{Kind: "pi", Text: contentText(msg.Content)}, true
+		return []Message{{Kind: "pi", Text: contentText(msg.Content)}}
 	default:
-		return Message{}, false
+		return nil
 	}
 }
 
@@ -287,23 +288,42 @@ func contentText(raw json.RawMessage) string {
 	return string(raw)
 }
 
-func assistantContent(raw json.RawMessage) (string, string, Message) {
+func assistantMessages(raw json.RawMessage) []Message {
 	var blocks []contentBlock
 	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return contentText(raw), "", Message{}
+		text := contentText(raw)
+		if text == "" {
+			return nil
+		}
+		return []Message{{Kind: "pi", Text: text}}
 	}
+	var messages []Message
 	var text []string
+	flushText := func() {
+		if len(text) == 0 {
+			return
+		}
+		messages = append(messages, Message{Kind: "pi", Text: strings.Join(text, "\n")})
+		text = nil
+	}
 	for _, block := range blocks {
 		switch block.Type {
 		case "text":
-			text = append(text, block.Text)
+			if block.Text != "" {
+				text = append(text, block.Text)
+			}
 		case "thinking":
-			return "", block.Thinking, Message{}
+			flushText()
+			if block.Thinking != "" {
+				messages = append(messages, Message{Kind: "think", Text: block.Thinking})
+			}
 		case "toolCall":
-			return "", "", Message{Kind: "tool", Tool: block.Name, Args: string(block.Arguments), Status: "running", CollapsedByDefault: true}
+			flushText()
+			messages = append(messages, Message{Kind: "tool", Tool: block.Name, Args: string(block.Arguments), Status: "running", CollapsedByDefault: true})
 		}
 	}
-	return strings.Join(text, "\n"), "", Message{}
+	flushText()
+	return messages
 }
 
 func trimTitle(value string) string {

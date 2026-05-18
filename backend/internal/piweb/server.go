@@ -203,6 +203,12 @@ func (s *Server) prompt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("text is required"))
 		return
 	}
+	if session, changed, err := s.store.AutoNameSession(sessionID, text); err != nil {
+		writeStoreError(w, err)
+		return
+	} else if changed {
+		s.broker.Publish(sessionID, "session.renamed", session)
+	}
 	if s.config.EnablePiExecution {
 		if err := s.runner.StartPiPrompt(s.context(), s.broker, s.store, sessionID, text); err != nil {
 			writeError(w, http.StatusConflict, err)

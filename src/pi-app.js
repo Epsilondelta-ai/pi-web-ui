@@ -42,7 +42,7 @@ class PiApp extends HTMLElement {
     this.querySelector(".sb-resizer")?.addEventListener("pointerdown", (event) => this.startResize(event));
     window.addEventListener("keydown", (event) => this.shortcut(event));
     window.addEventListener("click", (event) => {
-      if (!this.contains(event.target)) this.closeSessionMenus();
+      if (!event.target.closest?.(".session-menu, .session-menu-button")) this.closeSessionMenus();
     });
     window.addEventListener("message", (event) => {
       if (event.data?.type === "__activate_edit_mode") this.querySelector("[data-tweaks]")?.removeAttribute("hidden");
@@ -125,6 +125,10 @@ class PiApp extends HTMLElement {
     }
     if (event.type === "session.message") {
       this.appendMessage(event.payload);
+      return;
+    }
+    if (event.type === "session.renamed") {
+      this.updateSessionTitle(event.payload);
       return;
     }
     if (event.type === "tool.started") {
@@ -233,8 +237,30 @@ class PiApp extends HTMLElement {
 
   appendMessage(msg) {
     if (!this.termInner || !msg) return;
+    if (this.isDuplicateMessage(msg)) return;
+    if (msg.kind !== "user") this.removeLoadingMessage();
     this.termInner.append(this.messageNode(msg));
     this.scrollTerm();
+  }
+
+  isDuplicateMessage(msg) {
+    if (!["user", "pi", "think"].includes(msg.kind)) return false;
+    const messages = [...this.termInner.querySelectorAll(".msg:not(.loading)")];
+    const last = messages.at(-1);
+    return last?.dataset.kind === msg.kind && last.querySelector(".body")?.textContent === msg.text;
+  }
+
+  appendLoadingMessage() {
+    if (!this.termInner || this.termInner.querySelector(".msg.loading")) return;
+    const row = this.simpleMessage("pi loading", "pi >", "waiting for response…");
+    row.classList.add("loading");
+    row.dataset.kind = "loading";
+    this.termInner.append(row);
+    this.scrollTerm();
+  }
+
+  removeLoadingMessage() {
+    this.termInner?.querySelector(".msg.loading")?.remove();
   }
 
   messageNode(msg) {
@@ -262,6 +288,7 @@ class PiApp extends HTMLElement {
   simpleMessage(kind, prefix, text) {
     const row = document.createElement("div");
     row.className = "msg";
+    row.dataset.kind = kind.split(" ")[0];
     row.innerHTML = `<div class="prefix ${kind}"></div><div class="body"></div>`;
     row.querySelector(".prefix").textContent = prefix;
     row.querySelector(".body").textContent = text;
@@ -380,20 +407,25 @@ class PiApp extends HTMLElement {
     const text = this.prompt?.value.trim() || "";
     if (!text && !this.attachments?.children.length) return;
     const sessionId = this.dataset.activeSessionId;
-    if (this.apiConnected && sessionId) {
-      try {
-        await postPrompt(sessionId, text, this.attachmentContents.filter(Boolean));
-      } catch {
-        this.setConnection("err");
-      }
-    } else if (text) {
+    if (text) {
       this.appendMessage({ kind: "user", text });
+      this.appendLoadingMessage();
+      this.autonameActiveSession(text);
     }
     if (this.prompt) this.prompt.value = "";
+    const attachments = this.attachmentContents.filter(Boolean);
     this.attachmentContents = [];
     this.attachments?.replaceChildren();
     if (this.attachments) this.attachments.hidden = true;
     this.updatePrompt();
+    if (this.apiConnected && sessionId) {
+      try {
+        await postPrompt(sessionId, text, attachments);
+      } catch {
+        this.removeLoadingMessage();
+        this.setConnection("err");
+      }
+    }
   }
 
   async cancelActiveSession() {
@@ -448,6 +480,33 @@ class PiApp extends HTMLElement {
     if (button?.dataset.seed) this.seed(button.dataset.seed);
     if (button?.dataset.skill) this.seed(`/skill ${button.dataset.skill}\n\n`);
     if (button?.dataset.slash) this.pickSlash(button.dataset.slash);
+  }
+
+  updateSessionTitle(session) {
+    if (!session?.id) return;
+    const row = this.querySelector(`[data-session='${session.id}']`);
+    if (row) {
+      row.dataset.title = session.title;
+      const main = row.querySelector(".session-main");
+      if (main) main.dataset.title = session.title;
+      const title = row.querySelector(".title");
+      if (title) title.textContent = session.title;
+    }
+    const activeTitle = this.querySelector("[data-active-session-title]");
+    if (activeTitle && this.dataset.activeSessionId === session.id) {
+      activeTitle.textContent = session.title;
+      activeTitle.title = `${session.title} · ${session.id}`;
+    }
+  }
+
+  autonameActiveSession(text) {
+    const sessionId = this.dataset.activeSessionId;
+    if (!sessionId || !text.trim()) return;
+    const row = this.querySelector(`[data-session='${sessionId}']`);
+    const current = row?.dataset.title?.trim();
+    if (current && current !== "new session" && current !== "no session") return;
+    const title = text.trim().replace(/\s+/g, " ").slice(0, 48) + (text.trim().length > 48 ? "…" : "");
+    this.updateSessionTitle({ id: sessionId, title });
   }
 
   async deleteWorkspace(workspaceId) {

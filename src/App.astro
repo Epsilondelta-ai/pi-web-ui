@@ -168,9 +168,6 @@ function toolStatus(msg) {
         {fileTree.length > 0 ? <Fragment set:html={renderTree(fileTree)} /> : <div style="padding:8px 16px;color:var(--fg-4);font-size:11px;font-style:italic">file tree loads from backend.</div>}
       </div>
     </aside>
-    <div class="scrim" data-action="close-drawer"></div>
-  </section>
-
   <div class="prompt-region">
     <div class="slash-pop" hidden>
       <div class="slash-head">slash commands · type to filter</div>
@@ -185,6 +182,11 @@ function toolStatus(msg) {
     </div>
     <div class="prompt-meta"><span class="model-tag">local</span><span class="dim">·</span><span class="dim">ready</span><span class="ctx-bar"><i style="width:0%"></i></span><span>0% ctx</span></div>
   </div>
+
+    <div class="scrim" data-action="close-drawer"></div>
+  </section>
+
+
 
   <div class="twk-panel" data-tweaks hidden><div class="twk-hd"><b>Tweaks</b><button class="twk-x" type="button" data-action="close-tweaks" aria-label="Close tweaks">×</button></div><div class="twk-body"><div class="twk-sect">Layout</div><button class="twk-btn secondary" type="button" data-action="route-picker">workspace picker</button><button class="twk-btn secondary" type="button" data-action="route-workspace">session view</button><button class="twk-btn secondary" type="button" data-action="new-session">new session</button></div></div>
 </pi-app>

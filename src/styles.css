@@ -170,6 +170,7 @@ button.tc-head {
   flex: 1;
   display: grid;
   grid-template-columns: 280px 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   position: relative;
 }
@@ -179,6 +180,8 @@ button.tc-head {
   position: relative;
   min-width: 0;
   display: flex;
+  grid-column: 1;
+  grid-row: 1 / 3;
 }
 .sidebar-wrap > .sidebar { flex: 1 1 auto; min-width: 0; }
 
@@ -439,7 +442,10 @@ button.tc-head {
   min-width: 0;
   min-height: 0;
   position: relative;
+  grid-column: 2;
+  grid-row: 1;
 }
+.app[data-sidebar="collapsed"] .main { grid-column: 1; }
 
 .context-strip {
   flex-shrink: 0;
@@ -535,6 +541,8 @@ button.tc-head {
   color: var(--fg-0);
 }
 .msg .body .tool-ref { color: var(--tool-call); }
+.msg.loading .body { color: var(--fg-3); font-style: italic; }
+.msg.loading .body::after { content: ""; display: inline-block; width: 1ch; animation: blink 1s steps(1) infinite; }
 
 .tool-card {
   border: 1px solid var(--border);
@@ -670,6 +678,7 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   animation: pulse 1.06s steps(2, start) infinite;
 }
 @keyframes pulse { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.2; } }
+@keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.2; } }
 
 .cursor {
   display: inline-block;
@@ -694,7 +703,10 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   flex-direction: column;
   min-height: 0;
   font-size: var(--text-sm);
+  grid-column: 3;
+  grid-row: 1 / 3;
 }
+.app[data-sidebar="collapsed"] .tree { grid-column: 2; }
 .tree-head {
   padding: var(--space-3);
   border-bottom: 1px solid var(--border-dim);
@@ -735,12 +747,15 @@ pre.ascii-banner .dim { color: var(--fg-3); }
 .tree-node.modified .glyph, .tree-node.added .glyph { color: inherit; }
 
 .prompt-region {
-  flex-shrink: 0;
   border-top: 1px solid var(--border);
   background: var(--bg-2);
   padding-bottom: env(safe-area-inset-bottom);
   position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
 }
+.app[data-sidebar="collapsed"] .prompt-region { grid-column: 1; }
 
 .keypad-bar {
   display: flex;
@@ -1179,6 +1194,7 @@ pre.ascii-banner .dim { color: var(--fg-3); }
 @media (max-width: 880px) {
   .app-body { grid-template-columns: 1fr !important; }
   .app-body.with-tree { grid-template-columns: 1fr !important; }
+  .main, .prompt-region { grid-column: 1 !important; }
   .sb-resizer { display: none; }
   .sidebar {
     position: absolute;
