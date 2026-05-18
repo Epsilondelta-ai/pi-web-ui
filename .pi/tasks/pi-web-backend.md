@@ -1,4 +1,4 @@
-# Backend Tasks
+# Pi Web Backend Tasks
 
 ## Direction
 
@@ -54,37 +54,39 @@ data: {"sessionId":"...","payload":{}}
 
 ```
 
-## Tasks
+## Completed
 
 ### 1. Server skeleton
 
-- Create Go backend entrypoint.
-- Add local config: host, port, allowed origins.
-- Add graceful shutdown.
-- Add request logging middleware.
-- Add JSON response/error helpers.
+- Created Go backend entrypoint at `backend/cmd/pi-web-server`.
+- Added local config: host, port, allowed origins.
+- Added graceful shutdown.
+- Added request logging middleware.
+- Added JSON response/error helpers.
 
 ### 2. SSE broker
 
-- Implement session-scoped subscriptions.
-- Use `r.Context().Done()` to unregister disconnected clients.
-- Send headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`.
-- Flush after headers and every event.
-- Add heartbeat every 15 seconds.
-- Add monotonically increasing event ids.
-- Define slow-client policy with bounded channel buffers.
+- Implemented session-scoped subscriptions.
+- Uses `r.Context().Done()` to unregister disconnected clients.
+- Sends SSE headers.
+- Flushes after headers and every event.
+- Adds heartbeat every 15 seconds.
+- Adds monotonically increasing event ids.
+- Uses bounded channel buffers.
 
 ### 3. Mock domain store
 
-- Port current frontend fixture shape into Go structs.
-- Provide workspaces, sessions, file tree, conversation messages.
-- Keep IDs stable so frontend stories and API-backed UI match.
+- Ported current frontend fixture shape into Go structs.
+- Provides workspaces, sessions, file tree, conversation messages.
+- Keeps IDs stable so frontend stories and API-backed UI match.
 
 ### 4. Mock API endpoints
 
-- Implement health/workspace/session/file endpoints.
-- Implement prompt POST endpoint.
-- On prompt POST, append user message and emit fake pi/tool events over SSE.
+- Implemented health/workspace/session/file endpoints.
+- Implemented prompt POST endpoint.
+- Prompt POST appends user message and emits fake pi/tool events over SSE.
+
+## Next Tasks
 
 ### 5. Frontend API adapter
 
@@ -117,9 +119,9 @@ data: {"sessionId":"...","payload":{}}
 - Integration-test `POST /prompt` to ordered SSE events.
 - Frontend-test EventSource adapter with mocked stream.
 
-## First implementation milestone
+## First implementation milestone status
 
-Implement tasks 1 through 4 only:
+Completed:
 
 1. Go server skeleton
 2. SSE broker
