@@ -116,6 +116,7 @@ data: {"sessionId":"...","payload":{}}
 - [x] Remove real-mode backend fallback to mock workspaces.
 - [x] Add workspace remove/hide endpoint and frontend action.
 - [x] Add in-app folder browser starting from `~` for opening new workspaces.
+- [x] Store web-opened workspaces in SQLite at `~/.pi/agent/pi-web.db`.
 - [x] Add session delete endpoint and frontend action.
 - [x] Add session rename endpoint and frontend action.
 - [x] Wire frontend cancel/stop button to backend cancel endpoint.

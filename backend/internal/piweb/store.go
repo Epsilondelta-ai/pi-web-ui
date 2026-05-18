@@ -19,24 +19,16 @@ type Store struct {
 	workspacePath map[string]string
 	sessionFiles  map[string]string
 	sessionCWD    map[string]string
-	recentsPath   string
+	dbPath        string
 }
 
 func NewAutoStore() *Store {
-	return NewWebStore(DefaultWebRecentsPath())
+	return NewWebStore(DefaultWebDBPath())
 }
 
-func DefaultWebRecentsPath() string {
-	sessionDir := DefaultPiSessionDir()
-	if sessionDir == "" {
-		return ""
-	}
-	return filepath.Join(filepath.Dir(sessionDir), "pi-web-workspaces.json")
-}
-
-func NewWebStore(recentsPath string) *Store {
-	store := emptyStore(recentsPath)
-	for _, path := range loadWorkspaceRecents(recentsPath) {
+func NewWebStore(dbPath string) *Store {
+	store := emptyStore(dbPath)
+	for _, path := range LoadWebWorkspacePaths(dbPath) {
 		clean, err := ValidateWorkspacePath(path)
 		if err == nil {
 			store.addWorkspaceLocked(clean)
@@ -45,8 +37,8 @@ func NewWebStore(recentsPath string) *Store {
 	return store
 }
 
-func emptyStore(recentsPath string) *Store {
-	return &Store{workspaces: []Workspace{}, files: map[string][]FileNode{}, conversations: map[string][]Message{}, workspacePath: map[string]string{}, sessionFiles: map[string]string{}, sessionCWD: map[string]string{}, recentsPath: recentsPath}
+func emptyStore(dbPath string) *Store {
+	return &Store{workspaces: []Workspace{}, files: map[string][]FileNode{}, conversations: map[string][]Message{}, workspacePath: map[string]string{}, sessionFiles: map[string]string{}, sessionCWD: map[string]string{}, dbPath: dbPath}
 }
 
 func NewPiStore(sessionDir string) (*Store, error) {
@@ -84,37 +76,14 @@ func NewPiStore(sessionDir string) (*Store, error) {
 	return &Store{workspaces: workspaces, files: map[string][]FileNode{}, conversations: conversations, workspacePath: workspacePath, sessionFiles: sessionFiles, sessionCWD: sessionCWD}, nil
 }
 
-func loadWorkspaceRecents(path string) []string {
-	if path == "" {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var paths []string
-	if err := json.Unmarshal(data, &paths); err != nil {
-		return nil
-	}
-	return paths
-}
-
 func (s *Store) saveWorkspaceRecentsLocked() {
-	if s.recentsPath == "" {
-		return
-	}
 	paths := make([]string, 0, len(s.workspaces))
 	for _, workspace := range s.workspaces {
 		if workspace.Path != "" {
 			paths = append(paths, workspace.Path)
 		}
 	}
-	data, err := json.MarshalIndent(paths, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = os.MkdirAll(filepath.Dir(s.recentsPath), 0o700)
-	_ = os.WriteFile(s.recentsPath, append(data, '\n'), 0o600)
+	_ = SaveWebWorkspacePaths(s.dbPath, paths)
 }
 
 func (s *Store) addWorkspaceLocked(clean string) Workspace {

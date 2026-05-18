@@ -3,7 +3,6 @@ package piweb
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 )
 
@@ -26,11 +25,11 @@ func TestWebStoreLoadsOnlyWebRecents(t *testing.T) {
 	if _, _, err := CreatePiSessionFile(unwanted); err != nil {
 		t.Fatal(err)
 	}
-	recents := filepath.Join(t.TempDir(), "recents.json")
-	if err := os.WriteFile(recents, []byte(`[`+strconv.Quote(wanted)+`]`), 0o600); err != nil {
+	dbPath := filepath.Join(t.TempDir(), "pi-web.db")
+	if err := SaveWebWorkspacePaths(dbPath, []string{wanted}); err != nil {
 		t.Fatal(err)
 	}
-	store := NewWebStore(recents)
+	store := NewWebStore(dbPath)
 	workspaces := store.Workspaces()
 	if len(workspaces) != 1 || workspaces[0].Path != wanted || len(workspaces[0].Sessions) != 1 {
 		t.Fatalf("unexpected workspaces: %#v", workspaces)
