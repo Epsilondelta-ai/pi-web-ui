@@ -70,6 +70,18 @@ describe("pi-app runtime", () => {
     expect(bodies).toEqual(["old", "new"]);
   });
 
+  it("starts a new stream segment after tool cards", async () => {
+    const app = document.querySelector("pi-app");
+    await customElements.whenDefined("pi-app");
+    app.connectedCallback();
+    app.renderMessages([]);
+    app.appendDelta({ kind: "pi", delta: "before" });
+    app.appendMessage({ kind: "tool", tool: "bash", status: "running" });
+    app.appendDelta({ kind: "pi", delta: "after" });
+    const bodies = [...app.querySelectorAll(".msg[data-kind='pi'] .body")].map((node) => node.textContent);
+    expect(bodies).toEqual(["before", "after"]);
+  });
+
   it("streams assistant deltas before the final message", async () => {
     const app = document.querySelector("pi-app");
     await customElements.whenDefined("pi-app");

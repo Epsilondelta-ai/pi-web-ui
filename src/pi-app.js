@@ -245,6 +245,7 @@ class PiApp extends HTMLElement {
     if (!this.termInner || !msg) return;
     if (this.isDuplicateMessage(msg)) return;
     if (msg.kind !== "user") this.removeLoadingMessage();
+    if (msg.kind === "tool") this.finalizeStreamingMessages();
     this.termInner.querySelector(`.msg.streaming[data-kind='${msg.kind}']`)?.remove();
     this.termInner.append(this.messageNode(msg));
     this.scrollTerm();
@@ -261,7 +262,7 @@ class PiApp extends HTMLElement {
     if (!this.termInner || !payload?.delta) return;
     this.removeLoadingMessage();
     const kind = payload.kind === "think" ? "think" : "pi";
-    let row = [...this.termInner.querySelectorAll(`.msg.streaming[data-kind='${kind}']`)].at(-1);
+    let row = this.termInner.lastElementChild?.matches?.(`.msg.streaming[data-kind='${kind}']`) ? this.termInner.lastElementChild : null;
     if (!row) {
       row = this.simpleMessage(`${kind} streaming`, kind === "think" ? "…" : "pi >", "");
       row.classList.add("streaming");

@@ -142,9 +142,11 @@ func handlePiJSONEvent(line string, broker *Broker, store *Store, sessionID stri
 		case "thinking_delta", "reasoning_delta":
 			state.streamedThinking = true
 			broker.Publish(sessionID, "session.delta", map[string]string{"kind": "think", "delta": delta})
-		default:
+		case "text_delta":
 			state.streamedText = true
 			broker.Publish(sessionID, "session.delta", map[string]string{"kind": "pi", "delta": delta})
+		case "toolcall_delta", "toolcall_start", "toolcall_end", "text_start", "text_end", "thinking_start", "thinking_end", "start", "done":
+			return true
 		}
 		return true
 	case "message_end":
