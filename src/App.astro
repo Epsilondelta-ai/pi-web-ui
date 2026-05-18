@@ -30,18 +30,6 @@ const treeHidden = !treeOpen;
 const statusColor = showDisconnect ? "var(--danger)" : "var(--accent)";
 const statusTitle = showDisconnect ? "disconnected" : "connected";
 
-const quickPrompts = [
-  { title: "explain this repo", body: "skim the top-level README and package layout, summarize what this project does, and list any conventions a new contributor should know.", icon: "?" },
-  { title: "find the bug", body: "run the test suite, identify failing tests, and propose a minimal fix.", icon: "✗" },
-  { title: "add a feature", body: "describe what you want — pi will scaffold the change across files and run the tests.", icon: "+" },
-  { title: "refactor for clarity", body: "pick a file or module — pi will propose a smaller-footprint refactor, then apply with `auto-accept`.", icon: "↻" },
-];
-const starterSkills = [
-  { name: "tdd", desc: "write the test first, watch it fail, make it pass" },
-  { name: "monorepo", desc: "navigate workspaces, scope changes to packages" },
-  { name: "code-review", desc: "read like a reviewer · respond inline" },
-  { name: "ship-it", desc: "small commits · descriptive messages · open PR" },
-];
 function toolStatus(msg) {
   if (msg.status === "running") return `<span class="spinner">⠋</span><span style="color:var(--accent)">running</span>`;
   if (msg.status === "err") return `<span class="err">✗</span>${escapeHtml(msg.resultMeta || "failed")}`;
@@ -62,7 +50,7 @@ function toolStatus(msg) {
       <span class="sep">/</span><span class="session" data-active-session-title title={`${activeSession.title} · ${activeSession.id}`}>{activeSession.title}</span>
     </span>
     <div class="actions">
-      <button class:list={["iconbtn", treeOpen && "on"]} type="button" data-action="toggle-tree" aria-label="toggle file tree" title="files">
+      <button class:list={["iconbtn", treeOpen && "on"]} type="button" data-action="toggle-tree" aria-label="toggle file tree" title="files" hidden={workspaceHidden}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 3.5h5l1.2 1.5h6.8v8.5h-13z" stroke-linejoin="round"></path></svg>
       </button>
       <span class="iconbtn statusbtn" style={`color:${statusColor}`} title={statusTitle}>●</span>
@@ -95,11 +83,6 @@ function toolStatus(msg) {
           </button>
         ))}
       </div>
-      <div class="help-grid">
-        <div class="help-card"><h4>how it works</h4><span>this UI talks to a local <code>pi --serve</code> over WebSocket. run it once on the machine that hosts your code: <code>pi --serve --port 8732</code>. everything else stays on your disk.</span></div>
-        <div class="help-card"><h4>privacy</h4><span>no telemetry. no login. sessions live in <code>.pi/sessions/</code> on your machine. workspace paths are remembered locally in <code>localStorage</code>.</span></div>
-      </div>
-      <div style="text-align:center;color:var(--fg-4);font-size:11px;margin-top:16px"><span>v0.7.3 · MIT · </span><a href="https://pi.dev" style="color:var(--accent)">pi.dev</a><span> · </span><a href="#" style="color:var(--fg-3)">docs</a></div>
     </div>
   </section>
 
@@ -163,7 +146,7 @@ function toolStatus(msg) {
 
     <main class="main" data-main="empty" hidden={emptyHidden}> 
       <div class="context-strip"><span class="chip"><span class="lbl">model</span> <span class="val accent">sonnet:high</span></span><span class="chip"><span class="lbl">ctx</span><span class="ctx-bar"><i style="width:0%"></i></span><span class="val">0.0k / 200k</span></span><span class="chip"><span class="lbl">mode</span> <span class="val">ready</span></span><span class="chip"><span class="lbl">tools</span> <span class="val tool">0</span> ran</span><span class="chip" style="margin-left:auto"><span class="lbl">status</span> <span class="val">local</span></span></div>
-      <div class="empty-shell"><div class="empty-inner"><div class="empty-title">new session in <span class="accent" data-empty-workspace>{activeWorkspace.name}</span></div><div class="empty-sub">pi is idle. say the first thing.</div><div class="quick-grid">{quickPrompts.map((prompt) => <button type="button" class="quick-card" data-seed={prompt.body}><span class="qc-icon">{prompt.icon}</span><span class="qc-title">{prompt.title}</span><span class="qc-body">{prompt.body}</span></button>)}</div><div class="empty-section"><div class="empty-section-head"><span>load a skill</span><span class="dim">/skill &lt;name&gt;</span></div><div class="skill-list">{starterSkills.map((skill) => <button type="button" class="skill-row" data-skill={skill.name}><span class="sk-name">/skill {skill.name}</span><span class="sk-desc">{skill.desc}</span><span class="sk-cta">load ↵</span></button>)}</div></div><div class="empty-tips"><div class="dim">session id will be assigned on first send. saved to <code>.pi/sessions/</code>.</div></div></div></div>
+      <div class="empty-shell"><div class="empty-inner"><div class="empty-title">new session in <span class="accent" data-empty-workspace>{activeWorkspace.name}</span></div><div class="empty-sub">pi is idle. say the first thing.</div><div class="empty-tips"><div class="dim">session id will be assigned on first send. saved to <code>.pi/sessions/</code>.</div></div></div></div>
     </main>
 
     <aside class="tree" aria-label="file tree" hidden={treeHidden}> 
