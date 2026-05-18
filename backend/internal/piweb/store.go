@@ -19,14 +19,34 @@ type Store struct {
 	workspacePath map[string]string
 	sessionFiles  map[string]string
 	sessionCWD    map[string]string
+	recentsPath   string
 }
 
 func NewAutoStore() *Store {
-	store, err := NewPiStore(DefaultPiSessionDir())
-	if err == nil {
-		return store
+	return NewWebStore(DefaultWebRecentsPath())
+}
+
+func DefaultWebRecentsPath() string {
+	sessionDir := DefaultPiSessionDir()
+	if sessionDir == "" {
+		return ""
 	}
-	return &Store{workspaces: []Workspace{}, files: map[string][]FileNode{}, conversations: map[string][]Message{}, workspacePath: map[string]string{}, sessionFiles: map[string]string{}, sessionCWD: map[string]string{}}
+	return filepath.Join(filepath.Dir(sessionDir), "pi-web-workspaces.json")
+}
+
+func NewWebStore(recentsPath string) *Store {
+	store := emptyStore(recentsPath)
+	for _, path := range loadWorkspaceRecents(recentsPath) {
+		clean, err := ValidateWorkspacePath(path)
+		if err == nil {
+			store.addWorkspaceLocked(clean)
+		}
+	}
+	return store
+}
+
+func emptyStore(recentsPath string) *Store {
+	return &Store{workspaces: []Workspace{}, files: map[string][]FileNode{}, conversations: map[string][]Message{}, workspacePath: map[string]string{}, sessionFiles: map[string]string{}, sessionCWD: map[string]string{}, recentsPath: recentsPath}
 }
 
 func NewPiStore(sessionDir string) (*Store, error) {
@@ -62,6 +82,79 @@ func NewPiStore(sessionDir string) (*Store, error) {
 	}
 	sort.Slice(workspaces, func(i, j int) bool { return workspaces[i].Path < workspaces[j].Path })
 	return &Store{workspaces: workspaces, files: map[string][]FileNode{}, conversations: conversations, workspacePath: workspacePath, sessionFiles: sessionFiles, sessionCWD: sessionCWD}, nil
+}
+
+func loadWorkspaceRecents(path string) []string {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	if err := json.Unmarshal(data, &paths); err != nil {
+		return nil
+	}
+	return paths
+}
+
+func (s *Store) saveWorkspaceRecentsLocked() {
+	if s.recentsPath == "" {
+		return
+	}
+	paths := make([]string, 0, len(s.workspaces))
+	for _, workspace := range s.workspaces {
+		if workspace.Path != "" {
+			paths = append(paths, workspace.Path)
+		}
+	}
+	data, err := json.MarshalIndent(paths, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(s.recentsPath), 0o700)
+	_ = os.WriteFile(s.recentsPath, append(data, '\n'), 0o600)
+}
+
+func (s *Store) addWorkspaceLocked(clean string) Workspace {
+	for _, workspace := range s.workspaces {
+		if workspace.Path == clean {
+			return workspace
+		}
+	}
+	id := slug(filepath.Base(clean))
+	if id == "" {
+		id = "workspace"
+	}
+	used := map[string]int{}
+	for _, workspace := range s.workspaces {
+		used[workspace.ID] = 1
+	}
+	baseID := id
+	for used[id] > 0 {
+		id = uniqueID(baseID, used)
+	}
+	workspace := Workspace{ID: id, Name: filepath.Base(clean), Path: clean, LastUsed: "now", Sessions: []Session{}}
+	parsed, err := LoadPiSessions(piSessionDirForCWD(clean))
+	if err == nil {
+		for _, item := range parsed {
+			item.Session.Workspace = id
+			item.Session.ID = item.Header.ID
+			workspace.Sessions = append(workspace.Sessions, item.Session)
+			s.conversations[item.Header.ID] = item.Messages
+			s.sessionFiles[item.Header.ID] = item.File
+			s.sessionCWD[item.Header.ID] = item.Header.CWD
+		}
+		if len(parsed) > 0 {
+			workspace.LastUsed = parsed[0].Session.LastUsed
+		}
+	}
+	workspace.SessionCount = len(workspace.Sessions)
+	s.workspaces = append([]Workspace{workspace}, s.workspaces...)
+	s.files[id] = []FileNode{}
+	s.workspacePath[id] = clean
+	return workspace
 }
 
 func NewMockStore() *Store {
@@ -100,19 +193,8 @@ func (s *Store) OpenWorkspace(path string) (Workspace, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := slug(filepath.Base(clean))
-	if id == "" {
-		id = "workspace"
-	}
-	for _, workspace := range s.workspaces {
-		if workspace.ID == id || workspace.Path == clean {
-			return workspace, nil
-		}
-	}
-	workspace := Workspace{ID: id, Name: filepath.Base(clean), Path: clean, LastUsed: "now", Sessions: []Session{}}
-	s.workspaces = append([]Workspace{workspace}, s.workspaces...)
-	s.files[id] = []FileNode{}
-	s.workspacePath[id] = clean
+	workspace := s.addWorkspaceLocked(clean)
+	s.saveWorkspaceRecentsLocked()
 	return workspace, nil
 }
 
@@ -153,6 +235,7 @@ func (s *Store) DeleteWorkspace(workspaceID string) error {
 			s.workspaces = append(s.workspaces[:i], s.workspaces[i+1:]...)
 			delete(s.workspacePath, workspaceID)
 			delete(s.files, workspaceID)
+			s.saveWorkspaceRecentsLocked()
 			return nil
 		}
 	}

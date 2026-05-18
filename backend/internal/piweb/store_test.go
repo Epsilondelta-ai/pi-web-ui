@@ -2,6 +2,8 @@ package piweb
 
 import (
 	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -11,6 +13,27 @@ func TestValidateWorkspacePath(t *testing.T) {
 	}
 	if _, err := ValidateWorkspacePath("/tmp/project"); err != nil {
 		t.Fatalf("expected valid path: %v", err)
+	}
+}
+
+func TestWebStoreLoadsOnlyWebRecents(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_SESSION_DIR", t.TempDir())
+	wanted := t.TempDir()
+	unwanted := t.TempDir()
+	if _, _, err := CreatePiSessionFile(wanted); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := CreatePiSessionFile(unwanted); err != nil {
+		t.Fatal(err)
+	}
+	recents := filepath.Join(t.TempDir(), "recents.json")
+	if err := os.WriteFile(recents, []byte(`[`+strconv.Quote(wanted)+`]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewWebStore(recents)
+	workspaces := store.Workspaces()
+	if len(workspaces) != 1 || workspaces[0].Path != wanted || len(workspaces[0].Sessions) != 1 {
+		t.Fatalf("unexpected workspaces: %#v", workspaces)
 	}
 }
 
