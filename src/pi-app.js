@@ -217,11 +217,7 @@ class PiApp extends HTMLElement {
     row.dataset.workspace = workspaceId;
     row.dataset.title = session.title;
     row.innerHTML = `<button type="button" class="session-main" data-session="${escapeHtml(session.id)}" data-workspace="${escapeHtml(workspaceId)}" data-title="${escapeHtml(session.title)}"><span class="gutter"></span><span class="title"></span><span class="meta"></span></button><button type="button" class="session-menu-button" data-action="session-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="${menuId}" aria-label="session actions">…</button><div class="session-menu" id="${menuId}" role="menu" hidden><button type="button" role="menuitem" data-action="rename-session">rename</button><button type="button" role="menuitem" class="danger" data-action="delete-session">delete</button></div>`;
-    row.querySelector(".title").append(document.createTextNode(session.title));
-    const sid = document.createElement("span");
-    sid.className = "sid";
-    sid.textContent = session.id;
-    row.querySelector(".title").append(sid);
+    row.querySelector(".title").textContent = session.title;
     row.querySelector(".meta").textContent = session.lastUsed;
     row.querySelector(".meta").classList.toggle("live", !!session.live);
     row.classList.toggle("active", session.active || session.id === this.dataset.activeSessionId);
@@ -607,7 +603,7 @@ class PiApp extends HTMLElement {
         row.dataset.title = session.title;
         const main = row.querySelector(".session-main");
         if (main) main.dataset.title = session.title;
-        row.querySelector(".title")?.replaceChildren(document.createTextNode(session.title), Object.assign(document.createElement("span"), { className: "sid", textContent: session.id }));
+        if (row.querySelector(".title")) row.querySelector(".title").textContent = session.title;
       }
       const activeTitle = this.querySelector("[data-active-session-title]");
       if (activeTitle && this.dataset.activeSessionId === sessionId) activeTitle.textContent = session.title;

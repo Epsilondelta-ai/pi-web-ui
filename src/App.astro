@@ -113,7 +113,7 @@ function toolStatus(msg) {
                   <button type="button" class="session-row new-session-row" data-action="new-session" data-workspace={workspace.id}><span class="gutter">+</span><span class="title">new session</span><span class="meta">N</span></button>
                   {(workspace.sessions || []).map((session) => (
                     <button type="button" class:list={["session-row", isActiveWorkspace && session.id === activeSessionID && "active"]} data-session={session.id} data-workspace={workspace.id} data-title={session.title}>
-                      <span class="gutter"></span><span class="title">{session.title}<span class="sid">{session.id}</span></span><span class:list={["meta", session.live && "live"]}>{session.live && <span style="margin-right:4px">●</span>}{session.lastUsed}</span>
+                      <span class="gutter"></span><span class="title">{session.title}</span><span class:list={["meta", session.live && "live"]}>{session.live && <span style="margin-right:4px">●</span>}{session.lastUsed}</span>
                     </button>
                   ))}
                   {(workspace.sessions || []).length === 0 && <div style="padding:12px 16px;color:var(--fg-3);font-size:12px;font-style:italic">no sessions yet · press N to start one</div>}

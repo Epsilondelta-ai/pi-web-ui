@@ -357,7 +357,6 @@ button.tc-head {
 .session-row .gutter { color: var(--fg-4); text-align: center; font-size: 11px; }
 .session-row .title { color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .session-row.active .title { color: var(--fg-0); }
-.session-row .sid { color: var(--fg-3); font-size: 11px; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .session-row .meta { color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 .session-row .meta.live { color: var(--accent); }
 .session-menu-button {
