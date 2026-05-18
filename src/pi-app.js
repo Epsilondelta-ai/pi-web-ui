@@ -120,7 +120,9 @@ class PiApp extends HTMLElement {
   applyEvent(event) {
     if (event.type === "heartbeat") return;
     if (event.type === "session.status") {
-      this.setMode(event.payload?.status || "auto-accept");
+      const mode = event.payload?.status || "auto-accept";
+      this.setMode(mode);
+      if (mode === "idle" || mode === "cancelled") this.finalizeStreamingMessages();
       return;
     }
     if (event.type === "session.message") {
@@ -259,7 +261,7 @@ class PiApp extends HTMLElement {
     if (!this.termInner || !payload?.delta) return;
     this.removeLoadingMessage();
     const kind = payload.kind === "think" ? "think" : "pi";
-    let row = this.termInner.querySelector(`.msg.streaming[data-kind='${kind}']`);
+    let row = [...this.termInner.querySelectorAll(`.msg.streaming[data-kind='${kind}']`)].at(-1);
     if (!row) {
       row = this.simpleMessage(`${kind} streaming`, kind === "think" ? "…" : "pi >", "");
       row.classList.add("streaming");
@@ -282,6 +284,10 @@ class PiApp extends HTMLElement {
 
   removeLoadingMessage() {
     this.termInner?.querySelector(".msg.loading")?.remove();
+  }
+
+  finalizeStreamingMessages() {
+    this.termInner?.querySelectorAll(".msg.streaming").forEach((row) => row.classList.remove("streaming"));
   }
 
   messageNode(msg) {
@@ -427,8 +433,19 @@ class PiApp extends HTMLElement {
   async submitPrompt() {
     const text = this.prompt?.value.trim() || "";
     if (!text && !this.attachments?.children.length) return;
-    const sessionId = this.dataset.activeSessionId;
+    let sessionId = this.dataset.activeSessionId;
+    if (!sessionId && this.apiConnected && this.dataset.activeWorkspaceId) {
+      try {
+        const { session } = await createSession(this.dataset.activeWorkspaceId);
+        this.activateCreatedSession(this.dataset.activeWorkspaceId, session);
+        sessionId = session.id;
+      } catch {
+        this.setConnection("err");
+        return;
+      }
+    }
     this.showSessionMain();
+    this.finalizeStreamingMessages();
     if (text) {
       this.appendMessage({ kind: "user", text });
       this.appendLoadingMessage();
@@ -715,18 +732,7 @@ class PiApp extends HTMLElement {
     if (this.apiConnected && workspaceId) {
       try {
         const { session } = await createSession(workspaceId);
-        this.dataset.activeSessionId = session.id;
-        this.querySelectorAll(".session-row.active").forEach((row) => row.classList.remove("active"));
-        const group = this.querySelector(`[data-workspace-group='${workspaceId}'] .sessions`);
-        group?.append(this.createSessionRow(workspaceId, session));
-        group?.querySelector(`[data-session='${session.id}']`)?.classList.add("active");
-        const title = this.querySelector("[data-active-session-title]");
-        if (title) {
-          title.textContent = session.title;
-          title.title = `${session.title} · ${session.id}`;
-        }
-        this.renderMessages([]);
-        this.connectEvents(session.id);
+        this.activateCreatedSession(workspaceId, session);
       } catch {
         this.setConnection("err");
       }
@@ -737,6 +743,21 @@ class PiApp extends HTMLElement {
     const title = this.querySelector("[data-active-session-title]");
     if (empty) empty.textContent = label;
     if (title && !this.dataset.activeSessionId) title.textContent = "new session";
+  }
+
+  activateCreatedSession(workspaceId, session) {
+    this.dataset.activeSessionId = session.id;
+    this.querySelectorAll(".session-row.active").forEach((row) => row.classList.remove("active"));
+    const group = this.querySelector(`[data-workspace-group='${workspaceId}'] .sessions`);
+    if (group && !group.querySelector(`[data-session='${session.id}']`)) group.append(this.createSessionRow(workspaceId, session));
+    group?.querySelector(`[data-session='${session.id}']`)?.classList.add("active");
+    const title = this.querySelector("[data-active-session-title]");
+    if (title) {
+      title.textContent = session.title;
+      title.title = `${session.title} · ${session.id}`;
+    }
+    this.renderMessages([]);
+    this.connectEvents(session.id);
   }
 
   showSessionMain() {

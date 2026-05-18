@@ -46,9 +46,7 @@ func (r *Runner) StartPiPrompt(parent context.Context, broker *Broker, store *St
 			r.mu.Unlock()
 			cancel()
 		}()
-		user := Message{Kind: "user", Text: text}
-		_ = store.AppendMessage(sessionID, user)
-		broker.Publish(sessionID, "session.message", user)
+		broker.Publish(sessionID, "session.message", Message{Kind: "user", Text: text})
 		broker.Publish(sessionID, "session.status", map[string]string{"status": "running"})
 
 		args := []string{"--session", sessionFile, "--mode", "json", "--print", text}

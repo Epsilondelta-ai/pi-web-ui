@@ -57,6 +57,19 @@ describe("pi-app runtime", () => {
     expect(app.querySelector(".msg.loading")).toBeNull();
   });
 
+  it("does not append new deltas to an old streaming row", async () => {
+    const app = document.querySelector("pi-app");
+    await customElements.whenDefined("pi-app");
+    app.connectedCallback();
+    app.renderMessages([]);
+    app.appendDelta({ kind: "pi", delta: "old" });
+    app.finalizeStreamingMessages();
+    app.appendMessage({ kind: "user", text: "next" });
+    app.appendDelta({ kind: "pi", delta: "new" });
+    const bodies = [...app.querySelectorAll(".msg[data-kind='pi'] .body")].map((node) => node.textContent);
+    expect(bodies).toEqual(["old", "new"]);
+  });
+
   it("streams assistant deltas before the final message", async () => {
     const app = document.querySelector("pi-app");
     await customElements.whenDefined("pi-app");
