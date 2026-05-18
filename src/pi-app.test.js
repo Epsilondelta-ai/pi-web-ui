@@ -52,7 +52,7 @@ describe("pi-app runtime", () => {
     app.appendLoadingMessage();
     app.appendMessage({ kind: "user", text: "hello" });
     expect(app.querySelectorAll(".msg[data-kind='user']")).toHaveLength(1);
-    expect(app.querySelector(".msg.loading")).not.toBeNull();
+    expect(app.querySelector(".msg.loading .spinner")).not.toBeNull();
     app.appendMessage({ kind: "pi", text: "world" });
     expect(app.querySelector(".msg.loading")).toBeNull();
   });
@@ -117,7 +117,7 @@ describe("pi-app runtime", () => {
     expect(app.querySelector("[data-main='session']").hidden).toBe(false);
     expect(app.querySelector("[data-main='empty']").hidden).toBe(true);
     expect(app.querySelector(".msg[data-kind='user'] .body").textContent).toBe("hello");
-    expect(app.querySelector(".msg.loading")).not.toBeNull();
+    expect(app.querySelector(".msg.loading .spinner")).not.toBeNull();
   });
 
   it("switches between picker and workspace routes", async () => {

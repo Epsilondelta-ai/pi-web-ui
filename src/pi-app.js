@@ -276,7 +276,8 @@ class PiApp extends HTMLElement {
 
   appendLoadingMessage() {
     if (!this.termInner || this.termInner.querySelector(".msg.loading")) return;
-    const row = this.simpleMessage("pi loading", "pi >", "waiting for response…");
+    const row = this.simpleMessage("pi loading", "pi >", "");
+    row.querySelector(".body").innerHTML = `<span class="spinner">⠋</span><span>waiting for response…</span>`;
     row.classList.add("loading");
     row.dataset.kind = "loading";
     this.termInner.append(row);
