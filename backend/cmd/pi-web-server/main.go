@@ -17,10 +17,10 @@ import (
 func main() {
 	host := flag.String("host", "127.0.0.1", "host to bind")
 	port := flag.String("port", "8732", "port to bind")
-	realPi := flag.Bool("real-pi", false, "execute prompts through the local pi CLI")
+	mock := flag.Bool("mock", false, "mock prompt streaming instead of executing the local pi CLI")
 	flag.Parse()
 
-	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: *realPi}, piweb.NewAutoStore(), piweb.NewBroker())
+	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: !*mock}, piweb.NewAutoStore(), piweb.NewBroker())
 	httpServer := &http.Server{Addr: server.Addr(), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second}
 
 	go func() {

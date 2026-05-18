@@ -16,7 +16,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "backend": "go run ./backend/cmd/pi-web-server",
-    "backend:real": "go run ./backend/cmd/pi-web-server --real-pi",
+    "backend:mock": "go run ./backend/cmd/pi-web-server --mock",
     "backend:test": "go test ./...",
     "test": "vitest run",
     "test:watch": "vitest",

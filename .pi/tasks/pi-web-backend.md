@@ -103,9 +103,10 @@ data: {"sessionId":"...","payload":{}}
 - Parses pi JSONL session metadata/logs into frontend message objects.
 - Reads real workspace file trees when workspace paths exist.
 - Reads real git branch/dirty status when workspace paths are git repos.
-- Adds optional `--real-pi` backend mode to execute prompts through the local `pi` CLI.
+- Uses the local `pi` CLI for prompt execution by default.
 - Adds `POST /api/sessions/{sessionId}/cancel` for running prompt cancellation.
 - Normalizes pi CLI stdout/stderr into SSE events.
+- Keeps `--mock` / `bun run backend:mock` for safe UI/API/SSE checks without invoking `pi`.
 
 ### 7. Local safety
 
