@@ -111,7 +111,23 @@ data: {"sessionId":"...","payload":{}}
 - Tails pi JSONL session files during execution and publishes appended messages over SSE.
 - Adds `POST /api/workspaces/{workspaceId}/sessions` for persisted session creation.
 
-### 7. Local safety
+### 7. Completion backlog
+
+- [ ] Remove real-mode backend fallback to mock workspaces.
+- [ ] Add workspace remove/hide endpoint and frontend action.
+- [ ] Add session delete endpoint and frontend action.
+- [ ] Add session rename endpoint and frontend action.
+- [ ] Wire frontend cancel/stop button to backend cancel endpoint.
+- [ ] Implement prompt attachments by sending readable file context to backend.
+- [ ] Add safe file read endpoint and frontend file-tree open action.
+- [ ] Add SSE event replay with `Last-Event-ID`.
+- [ ] Redact obvious secrets before SSE emission.
+- [ ] Normalize tailed pi JSONL tool entries into tool SSE events.
+- [ ] Harden process cancellation with process groups where supported.
+- [ ] Refresh workspace/session metadata after create/delete/rename/prompt completion.
+- [ ] Keep `/share` and command palette intentionally absent.
+
+### 8. Local safety
 
 - Bind to localhost by default.
 - Add CORS allowlist for Astro dev, Storybook, and built UI origins.
@@ -119,7 +135,7 @@ data: {"sessionId":"...","payload":{}}
 - Prevent path traversal outside workspace root.
 - Add secret redaction before emitting tool output.
 
-### 8. Tests
+### 9. Tests
 
 - Unit-test SSE event encoding.
 - Unit-test broker subscribe/unsubscribe/fanout.
