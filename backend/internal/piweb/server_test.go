@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -21,6 +22,42 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), `"ok":true`) {
 		t.Fatalf("unexpected body: %s", res.Body.String())
+	}
+}
+
+func TestServesStaticUI(t *testing.T) {
+	files := fstest.MapFS{
+		"index.html":    {Data: []byte("<html>app shell</html>")},
+		"_astro/app.js": {Data: []byte("console.log('app')")},
+	}
+	server := NewServer(Config{StaticFiles: files}, NewMockStore(), NewBroker())
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{path: "/", want: "app shell"},
+		{path: "/_astro/app.js", want: "console.log('app')"},
+		{path: "/workspaces/demo", want: "app shell"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			res := httptest.NewRecorder()
+			server.Handler().ServeHTTP(res, req)
+			if res.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", res.Code)
+			}
+			if !strings.Contains(res.Body.String(), tc.want) {
+				t.Fatalf("unexpected body: %s", res.Body.String())
+			}
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/not-found", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("expected unknown API route to stay 404, got %d", res.Code)
 	}
 }
 

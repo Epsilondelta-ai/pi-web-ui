@@ -22,6 +22,12 @@ describe("api adapter", () => {
     expect(result.url).toBe("http://backend.test/api/workspaces");
   });
 
+  it("defaults to same-origin API paths for the embedded app", async () => {
+    delete globalThis.PI_WEB_API_BASE;
+    const result = await getWorkspaces();
+    expect(result.url).toBe("/api/workspaces");
+  });
+
   it("escapes session ids in paths", async () => {
     const result = await getSession("a/b");
     expect(result.url).toBe("http://backend.test/api/sessions/a%2Fb");

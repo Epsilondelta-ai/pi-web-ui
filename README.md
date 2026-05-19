@@ -16,6 +16,16 @@ bun run dev
 bun run build
 ```
 
+Single executable with the Astro UI embedded in the Go backend:
+
+```bash
+bun run build:binary
+./dist/pi-web
+# open http://127.0.0.1:8732
+```
+
+`pi` CLI execution still requires the local `pi` command to be installed.
+
 ## Backend
 
 ```bash

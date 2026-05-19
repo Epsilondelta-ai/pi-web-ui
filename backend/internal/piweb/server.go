@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ type Config struct {
 	Port              string
 	AllowedOrigins    []string
 	EnablePiExecution bool
+	StaticFiles       fs.FS
 }
 
 type Server struct {
@@ -69,10 +72,42 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/sessions/{sessionID}/prompt", s.prompt)
 	s.mux.HandleFunc("POST /api/sessions/{sessionID}/cancel", s.cancelSession)
 	s.mux.HandleFunc("GET /api/sessions/{sessionID}/events", s.sessionEvents)
+	if s.config.StaticFiles != nil {
+		s.mux.HandleFunc("GET /", s.staticFile)
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().UTC()})
+}
+
+func (s *Server) staticFile(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+		http.NotFound(w, r)
+		return
+	}
+	name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+	if name == "." || name == "" {
+		name = "index.html"
+	}
+	if fsFileExists(s.config.StaticFiles, name) {
+		http.ServeFileFS(w, r, s.config.StaticFiles, name)
+		return
+	}
+	if staticFallbackToIndex(name) && fsFileExists(s.config.StaticFiles, "index.html") {
+		http.ServeFileFS(w, r, s.config.StaticFiles, "index.html")
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func fsFileExists(files fs.FS, name string) bool {
+	info, err := fs.Stat(files, name)
+	return err == nil && !info.IsDir()
+}
+
+func staticFallbackToIndex(name string) bool {
+	return !strings.HasPrefix(name, "_astro/") && !strings.Contains(path.Base(name), ".")
 }
 
 func (s *Server) listFolders(w http.ResponseWriter, r *http.Request) {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"flag"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,6 +15,9 @@ import (
 
 	"pi-web-ui/backend/internal/piweb"
 )
+
+//go:embed static
+var staticAssets embed.FS
 
 func main() {
 	host := flag.String("host", "127.0.0.1", "host to bind")
@@ -24,7 +29,7 @@ func main() {
 	if *mock {
 		store = piweb.NewMockStore()
 	}
-	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: !*mock}, store, piweb.NewBroker())
+	server := piweb.NewServer(piweb.Config{Host: *host, Port: *port, EnablePiExecution: !*mock, StaticFiles: staticFiles()}, store, piweb.NewBroker())
 	httpServer := &http.Server{Addr: server.Addr(), Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second}
 
 	go func() {
@@ -46,4 +51,12 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("pi web backend stopped")
+}
+
+func staticFiles() fs.FS {
+	files, err := fs.Sub(staticAssets, "static")
+	if err != nil {
+		panic(err)
+	}
+	return files
 }

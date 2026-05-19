@@ -12,6 +12,9 @@
   "scripts": {
     "dev": "astro dev --host 0.0.0.0",
     "build": "astro build",
+    "embed:assets": "find backend/cmd/pi-web-server/static -mindepth 1 ! -name README.txt -exec rm -rf {} + && cp -R dist/. backend/cmd/pi-web-server/static/",
+    "build:binary": "bun run build && bun run embed:assets && go build -o dist/pi-web ./backend/cmd/pi-web-server",
+    "build:single": "bun run build:binary",
     "preview": "astro preview --host 0.0.0.0",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
