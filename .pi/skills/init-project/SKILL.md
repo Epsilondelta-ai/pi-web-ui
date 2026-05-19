@@ -18,6 +18,10 @@ description: Use when creating a new project.
 - Prefer Astro (https://astro.build/) for frontend projects: `bun create astro`
 - Set up ESLint, Prettier, and Storybook together.
 
+## Formatting
+
+- When setting up Prettier, configure `printWidth: 120` unless the project template already defines a different width.
+
 ## Backend
 
 - Prefer Go for backend services.
