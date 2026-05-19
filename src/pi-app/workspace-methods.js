@@ -1,4 +1,4 @@
-import { cloneWorkspace as cloneWorkspaceRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceCommands, getWorkspaceFiles, getWorkspaces, listFolders, openWorkspace as openWorkspaceRequest } from "../api.js";
+import { cloneWorkspace as cloneWorkspaceRequest, deleteWorkspace as deleteWorkspaceRequest, getGitStatus, getSession, getWorkspaceCommands, getWorkspaceFiles, getWorkspaceRuntimeStatus, getWorkspaces, listFolders, openWorkspace as openWorkspaceRequest } from "../api.js";
 import { escapeHtml, renderTree } from "../renderers.js";
 
 export const workspaceMethods = {
@@ -26,6 +26,7 @@ export const workspaceMethods = {
       if (this.dataset.route === "picker") await this.browseFolder();
       if (activeWorkspace) {
         void this.loadWorkspaceCommands(activeWorkspace.id);
+        void this.loadRuntimeStatus(activeWorkspace.id);
         await this.loadWorkspaceMeta(activeWorkspace.id);
       }
       if (activeSession) await this.loadSession(activeSession.id);
@@ -44,7 +45,7 @@ export const workspaceMethods = {
       }
       const status = this.querySelector("[data-git-status]");
       if (status && git) status.textContent = `${git.branch} · ${git.dirty} ✱`;
-      if (git?.branch) this.updatePromptMeta({ branch: git.branch });
+      if (git?.branch) this.updatePromptMeta({ currentBranch: git.branch });
     } catch {}
   },
 
@@ -52,6 +53,14 @@ export const workspaceMethods = {
     try {
       const { commands } = await getWorkspaceCommands(workspaceId);
       this.renderSlashCommands(commands || []);
+    } catch {}
+  },
+
+  async loadRuntimeStatus(workspaceId = this.dataset.activeWorkspaceId) {
+    if (!workspaceId || !this.apiConnected) return;
+    try {
+      const { status } = await getWorkspaceRuntimeStatus(workspaceId);
+      if (status) this.updatePromptMeta(status);
     } catch {}
   },
 
@@ -254,6 +263,7 @@ export const workspaceMethods = {
     const activeWorkspace = this.querySelector("[data-active-workspace]");
     if (activeWorkspace) activeWorkspace.textContent = workspaceName;
     void this.loadWorkspaceCommands(workspaceId);
+    void this.loadRuntimeStatus(workspaceId);
     await this.loadWorkspaceMeta(workspaceId);
     this.route("workspace");
   },

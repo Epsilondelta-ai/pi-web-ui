@@ -62,6 +62,8 @@ export const inputMethods = {
         body: result.output || "[no output]",
       });
       if (input) input.value = "";
+      void this.loadRuntimeStatus?.(workspaceId);
+      void this.loadWorkspaceMeta?.(workspaceId);
     } catch (error) {
       this.finishTool({ kind: "tool", tool: "shell", args: `$ ${command}`, status: "err", resultMeta: error instanceof Error ? error.message : String(error), body: "" });
       this.setConnection("err");

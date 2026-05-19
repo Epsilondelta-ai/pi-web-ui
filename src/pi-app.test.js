@@ -46,13 +46,15 @@ describe("pi-app runtime", () => {
     expect(items[1].querySelector(".sl-scope").textContent).toBe("project");
   });
 
-  it("renders the compact prompt status line", async () => {
+  it("renders the compact prompt status line from runtime status", async () => {
     const app = document.querySelector("pi-app");
     await customElements.whenDefined("pi-app");
     app.connectedCallback();
-    expect(app.querySelector("[data-prompt-meta]").textContent).toBe("GPT-5.5 | 5h 🔋(84%) | Week 🪫(14%) |  main");
-    app.updatePromptMeta({ branch: "feature/ui" });
+    expect(app.querySelector("[data-prompt-meta]").textContent).toBe("— | 5h 🪫(—) | Week 🪫(—) |  —");
+    app.updatePromptMeta({ model: "GPT-5.5", fiveHourQuota: 84, weeklyQuota: 14, currentBranch: "feature/ui" });
     expect(app.querySelector("[data-prompt-meta]").textContent).toBe("GPT-5.5 | 5h 🔋(84%) | Week 🪫(14%) |  feature/ui");
+    app.updatePromptMeta({ fiveHourQuota: 20, weeklyQuota: 21 });
+    expect(app.querySelector("[data-prompt-meta]").textContent).toBe("GPT-5.5 | 5h 🪫(20%) | Week 🔋(21%) |  feature/ui");
   });
 
   it("opens session actions from an ellipsis menu", async () => {

@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/workspaces/{workspaceID}/sessions", s.createSession)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/files", s.workspaceFiles)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/commands", s.workspaceCommands)
+	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/runtime-status", s.workspaceRuntimeStatus)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/files/read", s.readWorkspaceFile)
 	s.mux.HandleFunc("PUT /api/workspaces/{workspaceID}/files/write", s.writeWorkspaceFile)
 	s.mux.HandleFunc("GET /api/workspaces/{workspaceID}/git/status", s.gitStatus)
@@ -206,6 +207,23 @@ func (s *Server) workspaceCommands(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"commands": commands})
+}
+
+func (s *Server) workspaceRuntimeStatus(w http.ResponseWriter, r *http.Request) {
+	root, err := s.store.WorkspacePath(r.PathValue("workspaceID"))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	status := MockRuntimeStatus()
+	if s.config.EnablePiExecution {
+		status, err = WorkspaceRuntimeStatus(r.Context(), root)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": status})
 }
 
 func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {

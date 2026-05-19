@@ -25,18 +25,26 @@ class PiApp extends HTMLElement {
     this.attachmentContents = [];
     this.spinnerIndex = 0;
     this.piDeltaBuffer = "";
+    this.runtimeStatus = {};
     this.bind();
     this.restoreSidebar();
     this.updatePrompt();
     this.updatePromptMeta();
     this.scrollTerm();
     this.startSpinners();
+    this.startRuntimeStatusPolling();
     this.bootstrapAPI();
   }
 
   disconnectedCallback() {
     this.eventSource?.close();
     if (this.spinnerTimer) clearInterval(this.spinnerTimer);
+    if (this.runtimeStatusTimer) clearInterval(this.runtimeStatusTimer);
+  }
+
+  startRuntimeStatusPolling() {
+    if (this.runtimeStatusTimer) return;
+    this.runtimeStatusTimer = setInterval(() => this.loadRuntimeStatus?.(), 15000);
   }
 
   startSpinners() {
@@ -130,14 +138,26 @@ class PiApp extends HTMLElement {
       if (this.running) this.send.disabled = false;
       else this.updatePrompt();
     }
+    if (!this.running) void this.loadRuntimeStatus?.();
   }
 
-  updatePromptMeta({ branch } = {}) {
+  updatePromptMeta(status = {}) {
     const meta = this.querySelector("[data-prompt-meta]");
     if (!meta) return;
-    const gitBranch = branch || this.dataset.gitBranch || "main";
-    this.dataset.gitBranch = gitBranch;
-    meta.textContent = `GPT-5.5 | 5h 🔋(84%) | Week 🪫(14%) |  ${gitBranch}`;
+    this.runtimeStatus = {
+      ...this.runtimeStatus,
+      ...status,
+      currentBranch: status.currentBranch || status.branch || this.runtimeStatus?.currentBranch,
+    };
+    const model = this.runtimeStatus.model || "—";
+    const currentBranch = this.runtimeStatus.currentBranch || "—";
+    meta.textContent = `${model} | ${this.quotaLabel("5h", this.runtimeStatus.fiveHourQuota)} | ${this.quotaLabel("Week", this.runtimeStatus.weeklyQuota)} |  ${currentBranch}`;
+  }
+
+  quotaLabel(label, quota) {
+    if (!Number.isFinite(quota)) return `${label} 🪫(—)`;
+    const percent = Math.max(0, Math.min(100, Math.round(quota)));
+    return `${label} ${percent > 20 ? "🔋" : "🪫"}(${percent}%)`;
   }
 }
 

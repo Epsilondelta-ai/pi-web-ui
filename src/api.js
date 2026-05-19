@@ -72,6 +72,10 @@ export function getWorkspaceCommands(workspaceId) {
   return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/commands`);
 }
 
+export function getWorkspaceRuntimeStatus(workspaceId) {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/runtime-status`);
+}
+
 export function getWorkspaceFile(workspaceId, path) {
   return request(`/api/workspaces/${encodeURIComponent(workspaceId)}/files/read?path=${encodeURIComponent(path)}`);
 }
