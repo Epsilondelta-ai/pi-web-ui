@@ -843,6 +843,18 @@ pre.ascii-banner .dim { color: var(--fg-3); }
   user-select: none;
 }
 .tree-head .branch { color: var(--accent); text-transform: none; letter-spacing: 0; font-size: var(--text-xs); }
+.tree-head-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
+.tree-head button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  background: var(--bg-1);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1;
+  padding: 3px 7px;
+}
+.tree-head button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .tree-list { flex: 1 1 auto; min-height: 120px; overflow-y: auto; padding: 4px 0; }
 .tree-node {
   display: grid;

@@ -172,7 +172,7 @@ function toolStatus(msg) {
     </main>
 
     <aside class="tree" aria-label="file tree" hidden={treeHidden}> 
-      <div class="tree-head"><span>files</span><span class="branch" data-git-status>—</span></div>
+      <div class="tree-head"><span>files</span><span class="tree-head-actions"><span class="branch" data-git-status>—</span><button type="button" data-action="refresh-tree" aria-label="refresh file tree" title="refresh file tree">↻</button></span></div>
       <div class="tree-list">
         {fileTree.length > 0 ? <Fragment set:html={renderTree(fileTree)} /> : <div style="padding:8px 16px;color:var(--fg-4);font-size:11px;font-style:italic">file tree loads from backend.</div>}
       </div>

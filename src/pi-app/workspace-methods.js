@@ -44,6 +44,18 @@ export const workspaceMethods = {
     } catch {}
   },
 
+  async refreshTree() {
+    const workspaceId = this.dataset.activeWorkspaceId;
+    if (!workspaceId || !this.apiConnected) return;
+    const button = this.querySelector("[data-action='refresh-tree']");
+    if (button) button.disabled = true;
+    try {
+      await this.loadWorkspaceMeta(workspaceId);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  },
+
   async loadSession(sessionId) {
     try {
       const { session, messages } = await getSession(sessionId);
